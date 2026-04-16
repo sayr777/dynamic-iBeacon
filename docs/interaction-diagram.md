@@ -1,6 +1,6 @@
 # Диаграммы взаимодействия
 
-## Диаграмма состояний основного цикла
+## Диаграмма состояний MCU
 
 ```mermaid
 stateDiagram-v2
@@ -10,109 +10,79 @@ stateDiagram-v2
 
     state BOOT {
         direction TB
-        [*] --> init_platform : GPIO, UART, RTC
+        [*] --> init_platform : GPIO, UART, RTC (LSE)
         init_platform --> load_config : TAG_ID, KEY, unix_time из Flash
-        load_config --> init_jdy23 : первичный AT-профиль
+        load_config --> init_jdy23 : AT+VER (проверка связи)
         init_jdy23 --> [*]
     }
 
-    BOOT --> CHECK_CYCLES : cycle_count = 0, slot = RTC / SLOT_DURATION
-
-    state CHECK_CYCLES <<choice>>
-    CHECK_CYCLES --> UPDATE_PARAMS : cycle_count ≥ CYCLES_PER_SLOT
-    CHECK_CYCLES --> WAKE_JDY23 : cycle_count < CYCLES_PER_SLOT
+    BOOT --> UPDATE_PARAMS : slot = unix_time / SLOT_DURATION
 
     state UPDATE_PARAMS {
         direction TB
-        [*] --> reset_counter : cycle_count = 0
-        reset_counter --> inc_slot : slot++
-        inc_slot --> aes_compute : block = tag_id ∥ slot ∥ 0x00×10
+        [*] --> aes_compute : block = tag_id ∥ slot ∥ 0x00×10
         aes_compute --> extract : out = AES128(KEY, block)
-        extract --> [*] : major=out[0:2]  minor=out[2:4]  mac=out[4:7]
+        extract --> send_major : major = out[0:2]
+        send_major --> send_minor : AT+MAJOR{XXXX}
+        send_minor --> send_rst : AT+MINOR{XXXX}
+        send_rst --> wait_restart : AT+RST
+        wait_restart --> [*] : ожидание 600 мс
     }
 
-    UPDATE_PARAMS --> WAKE_JDY23
-
-    state WAKE_JDY23 {
-        direction TB
-        [*] --> gpio_high : GPIO_JDY_PWR = 1
-        gpio_high --> wait_boot : ожидание 50 мс
-        wait_boot --> [*]
-    }
-
-    WAKE_JDY23 --> SEND_BEACON
-
-    state SEND_BEACON <<choice>>
-    SEND_BEACON --> AT_UPDATE : params_changed == 1
-    SEND_BEACON --> TX_WAIT : params_changed == 0
-
-    state AT_UPDATE {
-        direction TB
-        [*] --> send_major : AT+MAJOR{XXXX}\r\n
-        send_major --> send_minor : AT+MINOR{XXXX}\r\n
-        send_minor --> send_rst : AT+RST\r\n
-        send_rst --> wait_restart : ожидание 500 мс
-        wait_restart --> [*] : params_changed = 0
-    }
-
-    AT_UPDATE --> SLEEP_JDY23
-    TX_WAIT --> SLEEP_JDY23 : JDY-23 передаёт пакет (50–80 мс)
-
-    state SLEEP_JDY23 {
-        direction TB
-        [*] --> gpio_low : GPIO_JDY_PWR = 0
-        gpio_low --> [*]
-    }
-
-    SLEEP_JDY23 --> STOP_MODE
+    UPDATE_PARAMS --> STOP_MODE : MCU останавливается на 5 мин
 
     state STOP_MODE {
         direction TB
-        [*] --> set_rtc_alarm : RTC alarm +2с
-        set_rtc_alarm --> enter_stop : HAL_PWR_EnterSTOPMode
+        [*] --> set_alarm : RTC alarm +300 с
+        set_alarm --> enter_stop : HAL_PWR_EnterSTOPMode (0.29 µА)
         enter_stop --> [*] : пробуждение по RTC
     }
 
-    STOP_MODE --> cycle_inc
-    cycle_inc --> CHECK_CYCLES : cycle_count++
+    STOP_MODE --> UPDATE_PARAMS : slot++
+
+    note right of STOP_MODE
+        JDY-23 работает АВТОНОМНО
+        пока MCU спит:
+        • реклама каждые 2 с
+        • ~150 пакетов за слот
+        • ~17 µА непрерывно
+    end note
 ```
 
 ---
 
-## Диаграмма последовательности (один полный цикл)
+## Диаграмма последовательности (один слот = 5 мин)
 
 ```mermaid
 sequenceDiagram
-    participant RTC as RTC (будильник)
-    participant MCU as STM32L031 (хост)
-    participant JDY as JDY-23 (метка)
+    participant RTC as RTC (LSE 32 кГц)
+    participant MCU as STM32L010 (хост)
+    participant JDY as JDY-23 (BLE метка)
 
-    Note over MCU: Stop mode (~1960 мс)
-    RTC-->>MCU: Пробуждение (RTC alarm)
+    Note over JDY: Работает автономно,<br/>реклама каждые 2 с,<br/>~17 µА
 
-    MCU->>MCU: cycle_count++
+    RTC-->>MCU: Пробуждение (RTC alarm, каждые 300 с)
+    activate MCU
 
-    alt cycle_count >= CYCLES_PER_SLOT (параметры устарели)
-        MCU->>MCU: cycle_count = 0, slot++
-        MCU->>MCU: AES128(KEY, tag_id ∥ slot) → major, minor, mac_suffix
-        MCU->>JDY: GPIO HIGH (питание на JDY-23)
-        MCU->>MCU: ожидание 50 мс (JDY-23 стартует)
-        MCU->>JDY: AT+MAJOR{XXXX}\r\n
-        JDY-->>MCU: +OK
-        MCU->>JDY: AT+MINOR{XXXX}\r\n
-        JDY-->>MCU: +OK
-        MCU->>JDY: AT+RST\r\n
-        MCU->>MCU: ожидание 500 мс (JDY-23 перезагружается)
-        Note over JDY: iBeacon с новыми Major/Minor
-    else cycle_count < CYCLES_PER_SLOT (параметры актуальны)
-        MCU->>JDY: GPIO HIGH (питание на JDY-23)
-        MCU->>MCU: ожидание 80 мс
-        Note over JDY: iBeacon с текущими Major/Minor
-    end
+    MCU->>MCU: slot++
+    MCU->>MCU: AES128(KEY, tag_id ∥ slot) → major, minor, mac_suffix
 
-    MCU->>JDY: GPIO LOW (питание снято с JDY-23)
-    MCU->>RTC: установить alarm +2с
+    MCU->>JDY: AT+MAJOR{XXXX}\r\n
+    JDY-->>MCU: +OK
+    MCU->>JDY: AT+MINOR{XXXX}\r\n
+    JDY-->>MCU: +OK
+    MCU->>JDY: AT+RST\r\n
+
+    Note over JDY: Перезагрузка ~500 мс,<br/>затем реклама с новыми<br/>Major/Minor
+
+    MCU->>RTC: alarm +300 с
     MCU->>MCU: HAL_PWR_EnterSTOPMode
+    deactivate MCU
+
+    Note over MCU: Stop mode 299 с (0.29 µА)
+    Note over JDY: Реклама каждые 2 с,<br/>~150 пакетов за слот
+
+    RTC-->>MCU: Следующее пробуждение
 ```
 
 ---
@@ -120,24 +90,27 @@ sequenceDiagram
 ## Временная диаграмма потребления
 
 ```
-Время (мс):
-   0          50          130        2000
-   |          |           |          |
-   |__________| __________|          |
-   GPIO_JDY   |  JDY-23   |          |
-              |  active   |          |
-              |           |__________|
-                          MCU Stop
-   
-   Нормальный цикл:
-   ├─ MCU active: 0..10 мс    (GPIO, логика, Stop-entry)
-   ├─ JDY-23 active: 10..90 мс (boot + 1 ADV packet at 100 мс interval)
-   └─ Stop mode: 90..2000 мс  (MCU + JDY off)
+Время (с):
+   0      0.6                               300
+   │       │                                 │
+   ┌───────┐                                 ┌───────┐
+   │ MCU   │                                 │ MCU   │
+   │ акт.  │                                 │ акт.  │
+   └───────┘─────────────────────────────────┘
+   2 мА    └──────── MCU Stop 0.29 µА ────────┘
 
-   Цикл обновления параметров (каждые 150 циклов = 5 мин):
-   ├─ MCU active: 0..10 мс    (AES вычисление)
-   ├─ JDY-23 + AT: 10..600 мс (boot + AT+MAJOR + AT+MINOR + AT+RST + restart)
-   └─ Stop mode: 600..2000 мс
+   ═══════════════════════════════════════════
+   JDY-23 ≈17 µА  (непрерывно, внутренний сон/реклама 2 с)
+
+   ┌──┐  ┌──┐  ┌──┐     ┌──┐  ┌──┐  ┌──┐
+   │  │  │  │  │  │ ... │  │  │  │  │  │   ← ADV пакеты JDY-23
+   └──┘  └──┘  └──┘     └──┘  └──┘  └──┘
+   0с   2с    4с         296с  298с  300с
+
+   Средний ток:
+   MCU:  (2мА × 0.6с + 0.29µА × 299.4с) / 300с = 4.3 µА
+   JDY:  17 µА (постоянно)
+   Итого: ~22 µА
 ```
 
 ---
@@ -146,22 +119,23 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant TAG as BLE-метка
+    participant TAG as BLE-метка (JDY-23)
     participant SCAN as BLE-сканер
     participant SRV as Сервер
 
-    TAG->>SCAN: iBeacon [Major=0x3A7F, Minor=0xC1B2, MAC=E5:3A:E4:9D:A1:XX]
+    loop каждые 2 с (автономно)
+        TAG->>SCAN: iBeacon [Major=0x3A7F, Minor=0xC1B2, MAC=E5:xx:xx:xx:xx:xx]
+    end
+
     SCAN->>SRV: {major: 0x3A7F, minor: 0xC1B2, rssi: -72, ts: 1735000000}
 
     Note over SRV: slot = ts / 300 = 5783333
     loop для s in [slot-1, slot, slot+1]
         loop для tag_id in 0..9999
-            SRV->>SRV: block = tag_id ∥ s ∥ 0x00×10
-            SRV->>SRV: out = AES128(KEY, block)
-            SRV->>SRV: проверить out[0:4] == 0x3A7FC1B2
+            SRV->>SRV: AES128(KEY, tag_id ∥ s) → проверить out[0:4]
         end
     end
 
-    Note over SRV: совпадение найдено: tag_id = 42
-    SRV->>SRV: зафиксировать событие: метка #42 у сканера X
+    Note over SRV: Совпадение: tag_id = 42
+    SRV->>SRV: Зафиксировать: метка №42, сканер X, время T
 ```
