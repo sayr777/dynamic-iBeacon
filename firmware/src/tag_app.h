@@ -6,20 +6,20 @@
 /* -----------------------------------------------------------------------
  * tag_app — основная логика приложения.
  *
- * Состояния машины состояний:
+ * Цикл работы:
  *
- *  BOOT → CHECK_CYCLES → UPDATE_PARAMS → WAKE_JDY23 → SEND_BEACON → STOP_MODE
- *                     ↗                              ↗
- *                 (cycle < LIMIT)         (params up to date)
+ *  BOOT → UPDATE_PARAMS → STOP_MODE → UPDATE_PARAMS → STOP_MODE → ...
+ *
+ *  STOP_MODE: STM32L010 спит SLOT_DURATION секунд (5 мин).
+ *  JDY-23 работает непрерывно и рекламирует автономно каждые 2 с.
+ *  UPDATE_PARAMS: AT+MAJOR + AT+MINOR + AT+RST → JDY-23 перезапускается
+ *                 с новыми параметрами.
  * ----------------------------------------------------------------------- */
 
 typedef enum
 {
     TAG_APP_STATE_BOOT = 0,
-    TAG_APP_STATE_CHECK_CYCLES,
     TAG_APP_STATE_UPDATE_PARAMS,
-    TAG_APP_STATE_WAKE_JDY23,
-    TAG_APP_STATE_SEND_BEACON,
     TAG_APP_STATE_STOP_MODE
 } tag_app_state_t;
 
