@@ -1,0 +1,23 @@
+AT+VER\r\n
+AT+DEFAULT\r\n
+AT+HOSTEN3\r\n
+AT+NAMETAG-DYN\r\n
+AT+ADVIN1\r\n
+AT+ALED0\r\n
+AT+IBUUIDFDA50693A4E24FB1AFCFC6EB07647825\r\n
+AT+MAJOR0001\r\n
+AT+MINOR0001\r\n
+AT+ENLOG0\r\n
+AT+RST\r\n
+
+# Notes:
+# - every command must be sent with \r\n (CRLF)
+# - ADVIN1 = 100 ms advertising interval
+#   (needed because host powers JDY-23 for only ~80 ms per cycle)
+# - HOSTEN3 = iBeacon mode
+# - MAJOR/MINOR 0001 are initial placeholders, host will overwrite at runtime
+# - UUID is a template, replace with project UUID if needed
+# - ALED0 disables the LED indicator
+# - ENLOG0 disables UART logging (reduces UART traffic)
+# - host STM32L031 is NOT connected during this initial setup
+# - battery is NOT connected during this initial setup
