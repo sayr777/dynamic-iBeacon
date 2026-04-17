@@ -1,6 +1,11 @@
 # Диаграммы взаимодействия
 
-## Диаграмма состояний MCU
+Платформа: **`YJ-16013` (nRF52832)**.  
+Подробный протокол: [`protocol.md`](protocol.md)
+
+---
+
+## Диаграмма состояний FSM
 
 ```mermaid
 stateDiagram-v2
@@ -9,108 +14,89 @@ stateDiagram-v2
     [*] --> BOOT
 
     state BOOT {
-        direction TB
-        [*] --> init_platform : GPIO, UART, RTC (LSE)
-        init_platform --> load_config : TAG_ID, KEY, unix_time из Flash
-        load_config --> init_jdy23 : AT+VER (проверка связи)
-        init_jdy23 --> [*]
+        direction LR
+        [*] --> init : tag_platform_init()\nRTC, SoftDevice S112, LFXO
+        init --> slot0 : unix_time ← GPREGRET2
+        slot0 --> [*] : last_slot = unix_time/300 − 1
     }
 
-    BOOT --> UPDATE_PARAMS : slot = unix_time / SLOT_DURATION
+    BOOT --> CHECK_SLOT
+
+    CHECK_SLOT --> UPDATE_PARAMS : unix_time/300 ≠ last_slot
+    CHECK_SLOT --> ADVERTISE    : unix_time/300 = last_slot
 
     state UPDATE_PARAMS {
-        direction TB
-        [*] --> aes_compute : block = tag_id ∥ slot ∥ 0x00×10
-        aes_compute --> extract : out = AES128(KEY, block)
-        extract --> send_major : major = out[0:2]
-        send_major --> send_minor : AT+MAJOR{XXXX}
-        send_minor --> send_rst : AT+MINOR{XXXX}
-        send_rst --> wait_restart : AT+RST
-        wait_restart --> [*] : ожидание 600 мс
+        direction LR
+        [*] --> aes    : block = tag_id[2] ∥ slot[4] ∥ 0x00[10]
+        aes    --> ext : out = AES128(KEY, block)
+        ext    --> set : Major=out[0:2] · Minor=out[2:4] · MAC=out[4:7]
+        set    --> [*] : sd_ble_gap_address_set + adv_set_configure
     }
 
-    UPDATE_PARAMS --> STOP_MODE : MCU останавливается на 5 мин
+    UPDATE_PARAMS --> ADVERTISE
 
-    state STOP_MODE {
-        direction TB
-        [*] --> set_alarm : RTC alarm +300 с
-        set_alarm --> enter_stop : HAL_PWR_EnterSTOPMode (0.29 µА)
-        enter_stop --> [*] : пробуждение по RTC
+    state ADVERTISE {
+        direction LR
+        [*] --> tx   : sd_ble_gap_adv_start(max_adv_evts=1)
+        tx   --> [*] : ch37+38+39 (~1 мс, 5.3 мА)\nBLE_GAP_EVT_ADV_SET_TERMINATED
     }
 
-    STOP_MODE --> UPDATE_PARAMS : slot++
+    ADVERTISE --> SLEEP
 
-    note right of STOP_MODE
-        JDY-23 работает АВТОНОМНО
-        пока MCU спит:
-        • реклама каждые 2 с
-        • ~150 пакетов за слот
-        • ~17 µА непрерывно
-    end note
+    state SLEEP {
+        direction LR
+        [*] --> night : is_night()?
+        night --> r60 : да → RTC +60 с
+        night --> r2  : нет → RTC +2 с
+        r60   --> off : sd_power_system_off() → ~1.5 µА
+        r2    --> off
+        off   --> [*]
+    }
+
+    SLEEP --> CHECK_SLOT : RTC пробуждение (холодный старт)
 ```
 
 ---
 
-## Диаграмма последовательности (один слот = 5 мин)
+## Диаграмма последовательности (один слот = 5 мин, 150 циклов)
 
 ```mermaid
 sequenceDiagram
-    participant RTC as RTC (LSE 32 кГц)
-    participant MCU as STM32L010 (хост)
-    participant JDY as JDY-23 (BLE метка)
+    participant RTC  as RTC (LFXO)
+    participant MCU  as nRF52832
+    participant AIR  as Эфир (BLE)
+    participant SRV  as Сервер
 
-    Note over JDY: Работает автономно,<br/>реклама каждые 2 с,<br/>~17 µА
+    Note over MCU: System OFF ~1.5 µА
 
-    RTC-->>MCU: Пробуждение (RTC alarm, каждые 300 с)
+    RTC -->> MCU : пробуждение #1 (t=0 с)
     activate MCU
+    MCU ->>  MCU : slot=unix_time/300 → граница слота!
+    MCU ->>  MCU : AES128(KEY, tag_id∥slot) → Major, Minor, MAC
+    MCU ->>  AIR : iBeacon ch37+38+39 (~1 мс)
+    MCU ->>  MCU : sd_power_system_off()
+    deactivate MCU
+    Note over MCU: Sleep 1999 мс
 
-    MCU->>MCU: slot++
-    MCU->>MCU: AES128(KEY, tag_id ∥ slot) → major, minor, mac_suffix
+    RTC -->> MCU : пробуждение #2 (t=2 с)
+    activate MCU
+    MCU ->>  MCU : slot не изменился
+    MCU ->>  AIR : iBeacon ch37+38+39 (те же Major/Minor/MAC)
+    MCU ->>  MCU : sd_power_system_off()
+    deactivate MCU
+    Note over MCU: ...
 
-    MCU->>JDY: AT+MAJOR{XXXX}\r\n
-    JDY-->>MCU: +OK
-    MCU->>JDY: AT+MINOR{XXXX}\r\n
-    JDY-->>MCU: +OK
-    MCU->>JDY: AT+RST\r\n
+    Note over MCU,AIR: 148 пробуждений с теми же параметрами...
 
-    Note over JDY: Перезагрузка ~500 мс,<br/>затем реклама с новыми<br/>Major/Minor
-
-    MCU->>RTC: alarm +300 с
-    MCU->>MCU: HAL_PWR_EnterSTOPMode
+    RTC -->> MCU : пробуждение #150 (t=298 с)
+    activate MCU
+    MCU ->>  AIR : iBeacon ch37+38+39
+    MCU ->>  MCU : sd_power_system_off()
     deactivate MCU
 
-    Note over MCU: Stop mode 299 с (0.29 µА)
-    Note over JDY: Реклама каждые 2 с,<br/>~150 пакетов за слот
+    Note over AIR,SRV: Сканер передаёт (Major, Minor, RSSI, ts) на сервер
 
-    RTC-->>MCU: Следующее пробуждение
-```
-
----
-
-## Временная диаграмма потребления
-
-```
-Время (с):
-   0      0.6                               300
-   │       │                                 │
-   ┌───────┐                                 ┌───────┐
-   │ MCU   │                                 │ MCU   │
-   │ акт.  │                                 │ акт.  │
-   └───────┘─────────────────────────────────┘
-   2 мА    └──────── MCU Stop 0.29 µА ────────┘
-
-   ═══════════════════════════════════════════
-   JDY-23 ≈17 µА  (непрерывно, внутренний сон/реклама 2 с)
-
-   ┌──┐  ┌──┐  ┌──┐     ┌──┐  ┌──┐  ┌──┐
-   │  │  │  │  │  │ ... │  │  │  │  │  │   ← ADV пакеты JDY-23
-   └──┘  └──┘  └──┘     └──┘  └──┘  └──┘
-   0с   2с    4с         296с  298с  300с
-
-   Средний ток:
-   MCU:  (2мА × 0.6с + 0.29µА × 299.4с) / 300с = 4.3 µА
-   JDY:  17 µА (постоянно)
-   Итого: ~22 µА
+    SRV ->>  SRV  : slot=ts/300; AES×30000 → tag_id=42 (<1 мс)
 ```
 
 ---
@@ -119,23 +105,57 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant TAG as BLE-метка (JDY-23)
+    participant TAG  as BLE-метка (nRF52832)
     participant SCAN as BLE-сканер
-    participant SRV as Сервер
+    participant SRV  as Сервер
 
-    loop каждые 2 с (автономно)
-        TAG->>SCAN: iBeacon [Major=0x3A7F, Minor=0xC1B2, MAC=E5:xx:xx:xx:xx:xx]
+    loop каждые 2 с
+        TAG  ->> SCAN : iBeacon\n[UUID=..., Major=0x3A7F, Minor=0xC1B2,\nMAC=E5:C3:7F:A2:11:B4]
     end
 
-    SCAN->>SRV: {major: 0x3A7F, minor: 0xC1B2, rssi: -72, ts: 1735000000}
+    SCAN ->> SRV : {major:0x3A7F, minor:0xC1B2, ts:1735000200}
 
-    Note over SRV: slot = ts / 300 = 5783333
-    loop для s in [slot-1, slot, slot+1]
-        loop для tag_id in 0..9999
-            SRV->>SRV: AES128(KEY, tag_id ∥ s) → проверить out[0:4]
+    Note over SRV : slot = 1735000200 / 300 = 5783333
+
+    loop s ∈ {slot−1, slot, slot+1}
+        loop tag_id ∈ 0..9999
+            SRV ->> SRV : out = AES128(KEY, tag_id∥s)\nout[0:4] == 0x3A7FC1B2 ?
         end
     end
 
-    Note over SRV: Совпадение: tag_id = 42
-    SRV->>SRV: Зафиксировать: метка №42, сканер X, время T
+    Note over SRV : Найдено: tag_id=42, s=5783333\n(30 000 операций, ~0.3 мс)
+    SRV ->> SRV  : событие: метка №42, позиция X, время T
+```
+
+---
+
+## Временна́я диаграмма потребления
+
+```
+Ток:
+                    ┌──────┐
+  5.3 мА │          │  TX  │
+         │          │~1 мс │
+  ~0 мА  │──────────┘      └───────────────────────────────────│
+         │<──── AES + init ─>│<────── System OFF ~1999 мс ─────>│
+         │     ~0.5 мс       │        nRF52832: ~1.5 µА         │
+         │                   │        MCP1700:  ~1.0 µА         │
+         0                                                   2000 мс
+
+Дневной цикл (интервал 2 с):
+  TX:    5.3 мА × 1 мс / 2000 мс   =  2.65 µА
+  Sleep: 1.5 µА × 1999 мс / 2000   =  1.50 µА
+  LDO:   1.0 µА (постоянно)         =  1.00 µА
+  AES:   4.0 мА × 5 мс / 300 000   =  0.07 µА  (раз в 5 мин)
+  ────────────────────────────────────────────
+  Итого день:                        5.22 µА
+
+Ночной цикл (интервал 60 с):
+  TX:    5.3 мА × 1 мс / 60 000    =  0.09 µА  ← исчезает
+  Sleep: 1.5 µА + 1.0 µА           =  2.50 µА
+  ────────────────────────────────────────────
+  Итого ночь:                        2.59 µА
+
+Среднесуточный (17 ч день + 7 ч ночь):
+  I = (5.22×17 + 2.59×7) / 24     = 4.40 µА
 ```
