@@ -12,9 +12,14 @@
 #define TAG_ID  1U
 
 /* Продолжительность одного временного слота в секундах (5 минут).
- * STM32L010 спит ровно SLOT_DURATION секунд между обновлениями параметров.
- * JDY-23 за это время отправляет SLOT_DURATION/2 = 150 рекламных пакетов. */
+ * За один слот метка отправляет SLOT_DURATION / WAKE_INTERVAL = 150 пакетов. */
 #define TAG_SLOT_DURATION_SEC  300U
+
+/* Интервал пробуждения и рекламы в секундах */
+#define TAG_WAKE_INTERVAL_SEC  2U
+
+/* Количество циклов до смены параметров */
+#define TAG_CYCLES_PER_SLOT  (TAG_SLOT_DURATION_SEC / TAG_WAKE_INTERVAL_SEC)
 
 /* 128-битный секретный ключ региона (AES-128).
  * ЗАМЕНИТЬ на реальный ключ из server/keygen.py */
@@ -23,26 +28,26 @@
     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C  \
 }
 
-/* Начальное значение unix_time, которое записывается при прошивке.
- * Обновлять при каждой прошивке новой единицы или обслуживании.
- * Значение ниже — заглушка (2024-01-01 00:00:00 UTC). */
-#define TAG_INITIAL_UNIX_TIME  1704067200UL
+/* Начальное значение unix_time, записывается при прошивке.
+ * Обновлять при каждой прошивке новой единицы.
+ * Значение ниже — заглушка (2026-01-01 00:00:00 UTC). */
+#define TAG_INITIAL_UNIX_TIME  1767225600UL
 
-/* Задержка ожидания готовности JDY-23 после подачи питания или перезагрузки.
- * JDY-23 нужно ~50 мс для инициализации перед приёмом AT-команд. */
-#define TAG_JDY23_BOOT_DELAY_MS  50U
+/* UUID iBeacon (стандартный шаблон, заменить при необходимости) */
+#define TAG_IBEACON_UUID  { \
+    0xFD, 0xA5, 0x06, 0x93, 0xA4, 0xE2, 0x4F, 0xB1, \
+    0xAF, 0xCF, 0xC6, 0xEB, 0x07, 0x64, 0x78, 0x25  \
+}
 
-/* Задержка после AT+RST: время перезагрузки JDY-23 с новыми параметрами.
- * Должно быть достаточно для полного старта и начала рекламы. */
-#define TAG_JDY23_RESET_DELAY_MS  600U
+/* TX мощность (дБм): -20, -16, -12, -8, -4, 0, +4 */
+#define TAG_TX_POWER_DBM  0
 
-/* UART baudrate для JDY-23 */
-#define TAG_JDY23_BAUDRATE  9600U
+/* Первые 3 байта MAC (OUI с locally administered bit).
+ * Последние 3 байта вычисляются AES и меняются каждый слот. */
+#define TAG_MAC_PREFIX  { 0xE5U, 0x00U, 0x00U }
 
-/* Первые 3 байта MAC (OUI, locally administered bit установлен).
- * Последние 3 байта вычисляются алгоритмом и меняются раз в слот. */
-#define TAG_MAC_BYTE0  0xE5U
-#define TAG_MAC_BYTE1  0x00U
-#define TAG_MAC_BYTE2  0x00U
+/* Включить защиту от считывания через SWD (APPROTECT).
+ * Установить 1 перед финальным производственным прошиванием. */
+#define TAG_ENABLE_APPROTECT  0
 
 #endif /* TAG_CONFIG_H */

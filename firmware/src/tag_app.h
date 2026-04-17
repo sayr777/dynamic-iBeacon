@@ -4,23 +4,29 @@
 #include <stdint.h>
 
 /* -----------------------------------------------------------------------
- * tag_app — основная логика приложения.
+ * tag_app — основная логика динамической BLE-метки на nRF52810.
  *
- * Цикл работы:
+ * Цикл работы (каждые TAG_WAKE_INTERVAL_SEC = 2 с):
  *
- *  BOOT → UPDATE_PARAMS → STOP_MODE → UPDATE_PARAMS → STOP_MODE → ...
+ *  BOOT
+ *   │
+ *   ▼
+ *  CHECK_CYCLES ──► (cycle < CYCLES_PER_SLOT) ──► ADVERTISE ──► SLEEP
+ *   │                                                               │
+ *   ▼ (cycle >= CYCLES_PER_SLOT)                          RTC будит│
+ *  UPDATE_PARAMS ──────────────────────────────► ADVERTISE ──► SLEEP
  *
- *  STOP_MODE: STM32L010 спит SLOT_DURATION секунд (5 мин).
- *  JDY-23 работает непрерывно и рекламирует автономно каждые 2 с.
- *  UPDATE_PARAMS: AT+MAJOR + AT+MINOR + AT+RST → JDY-23 перезапускается
- *                 с новыми параметрами.
+ *  UPDATE_PARAMS: AES128(KEY, tag_id || slot) → major, minor, mac
+ *  ADVERTISE:     один advertising event (~1 мс), затем deep sleep
  * ----------------------------------------------------------------------- */
 
 typedef enum
 {
     TAG_APP_STATE_BOOT = 0,
+    TAG_APP_STATE_CHECK_CYCLES,
     TAG_APP_STATE_UPDATE_PARAMS,
-    TAG_APP_STATE_STOP_MODE
+    TAG_APP_STATE_ADVERTISE,
+    TAG_APP_STATE_SLEEP
 } tag_app_state_t;
 
 /* Запустить бесконечный цикл приложения (не возвращается) */
