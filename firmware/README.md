@@ -1,4 +1,4 @@
-# Прошивка nRF52810 (E73-2G4M04S1A)
+# Прошивка nRF52832 (YJ-16013)
 
 ## Назначение
 
@@ -15,9 +15,9 @@
 
 | Параметр | Значение |
 |---|---|
-| SoC | `nRF52810` (Nordic Semiconductor) |
-| Модуль | `EBYTE E73-2G4M04S1A` |
-| Альтернативный модуль | `YJ-16013` (`nRF52832`) — **рекомендуется для прототипа** (см. platform-comparison.md) |
+| SoC | `nRF52832` (Nordic Semiconductor) |
+| Модуль | `EBYTE YJ-16013` |
+| Альтернативный модуль | `E73-2G4M04S1A` (`nRF52810`) — для серийного производства 1000+ шт |
 | SDK | `nRF5 SDK 17.1.x` (рекомендуется) или `nRF Connect SDK` (Zephyr) |
 | BLE стек | `SoftDevice S112` (только Broadcaster) |
 | Программатор | `J-LINK` / `nRF52 DK` / `ST-LINK V2` / CMSIS-DAP через `SWD` |
@@ -49,7 +49,7 @@ Zephyr оправдан при переходе на nRF91 (LTE), nRF5340 (dual-
 
 Прошивка строится на платформе [`ble-tag-e73`](../../ble-tag-e73/firmware):
 
-- инициализация `nRF52810`, тактирование, `RTC`, `SoftDevice S112` — из `ble-tag-e73`;
+- инициализация `nRF52832`, тактирование, `RTC`, `SoftDevice S112` — из `ble-tag-e73`;
 - `advertising` механика — из `ble-tag-e73`;
 - добавляется: `AES-128`, счётчик слотов, смена `Major/Minor/MAC` каждый слот.
 
@@ -63,7 +63,7 @@ firmware/
     ├── main.c                    — точка входа, инициализация SD, бесконечный цикл
     ├── tag_app.h / tag_app.c     — FSM: BOOT → UPDATE_PARAMS → ADVERTISE → SLEEP
     ├── tag_platform.h            — платформенные абстракции (RTC, BLE adv, sleep)
-    ├── tag_platform_nrf52810.c   — реализация для nRF52810 + S112
+    ├── tag_platform_nrf52832.c   — реализация для nRF52832 + S112
     ├── tag_config.h              — конфигурация изделия (не в репо, из .example.h)
     ├── aes128.h / aes128.c       — компактный AES-128 ECB (только шифрование)
     └── beacon_id.h / beacon_id.c — вычисление major/minor/mac из tag_id + slot
