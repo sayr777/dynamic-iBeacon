@@ -18,12 +18,32 @@
 | SoC | `nRF52810` (Nordic Semiconductor) |
 | Модуль | `EBYTE E73-2G4M04S1A` |
 | Альтернативный модуль | `YJ-16013` (`nRF52832`) — прошивка идентична, меняется только таргет |
-| SDK | **Zephyr** (рекомендуется) или `nRF5 SDK 17.1.x` |
-| BLE стек | `SoftDevice S112` / Zephyr BT Broadcaster-only |
+| SDK | `nRF5 SDK 17.1.x` (рекомендуется) или `nRF Connect SDK` (Zephyr) |
+| BLE стек | `SoftDevice S112` (только Broadcaster) |
 | Программатор | `J-LINK` / `nRF52 DK` / `ST-LINK V2` / CMSIS-DAP через `SWD` |
-| Прошивка | `west flash` (Zephyr) или `nrfjprog` / `make flash` (nRF5 SDK) |
 
 `S112` выбран вместо `S132` потому что метка только передаёт (`Broadcaster`) — приёмник не нужен. `S112` занимает меньше Flash и RAM.
+
+## Выбор SDK
+
+| | nRF5 SDK 17.1.x | nRF Connect SDK (Zephyr) |
+|---|---|---|
+| Основа | простая очередь событий | Zephyr RTOS (ОСРВ) |
+| Установка | скачать архив (~500 МБ) + GCC | `west init` + 2–3 ГБ зависимостей |
+| System OFF deep sleep | ✅ нативная, отлаженная | ⚠️ через `PM_STATE_SOFT_OFF`, менее стабильна |
+| iBeacon sample | ✅ есть | ✅ `samples/bluetooth/ibeacon` |
+| RAM overhead | ~8 KB (SoftDevice) | +30–50 KB (RTOS) |
+| Для нашей задачи | ✅ **оптимально** | приемлемо, но избыточно |
+| Когда оправдан | BLE Broadcaster / простые устройства | nRF91 (LTE/NB-IoT), nRF5340, BLE Mesh |
+
+**Рекомендация**: nRF5 SDK для данного проекта. Наша задача — BLE Broadcaster + deep sleep,
+это именно тот класс задач, для которого nRF5 SDK создавался. Накладные расходы Zephyr RTOS
+здесь не нужны и усложняют настройку окружения.
+
+Zephyr оправдан при переходе на nRF91 (LTE), nRF5340 (dual-core),
+или если нужна переносимость на не-Nordic платформы.
+
+Все доступные Zephyr samples: https://docs.zephyrproject.org/latest/samples/index.html
 
 ## Основа из ble-tag-e73
 
@@ -72,34 +92,42 @@ firmware/
 
 ## Сборка и прошивка
 
-### Вариант A: Zephyr SDK (рекомендуется)
-
-Zephyr содержит готовый `iBeacon` sample и поддерживает все Nordic SoC через `west`.  
-Все доступные samples: https://docs.zephyrproject.org/latest/samples/index.html
+### nRF5 SDK + GCC (рекомендуется)
 
 ```bash
-# 1. Установить west
-pip install west
+# 1. Скачать nRF5 SDK 17.1.0:
+#    https://www.nordicsemi.com/Software-and-tools/Software/nRF5-SDK
 
-# 2. Инициализировать workspace
-west init zephyrproject && cd zephyrproject && west update
+# 2. Установить ARM GCC toolchain:
+#    https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads
 
-# 3. Установить Zephyr SDK toolchain
-# https://docs.zephyrproject.org/latest/develop/getting_started/
+# 3. Установить nRF Command Line Tools (nrfjprog):
+#    https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Command-Line-Tools
 
-# 4. Сборка iBeacon sample как основа (доработать — добавить AES-ротацию)
-west build -b nrf52810pca10040 samples/bluetooth/ibeacon
-
-# 5. Прошивка через SWD (выбрать доступный runner)
-west flash --runner nrfjprog   # J-Link + nrfjprog (рекомендуется)
-west flash --runner jlink      # прямо через J-Link
-west flash --runner openocd    # OpenOCD + CMSIS-DAP / ST-LINK
-
-# 6. Проверить доступные runners
-west flash -H
+# 4. Сборка и прошивка
+cd firmware/pca10040e/s112/armgcc
+make
+make flash_softdevice   # прошить SoftDevice S112 один раз
+make flash              # прошить приложение
 ```
 
-Минимальный `prj.conf` (Broadcaster-only, экономия Flash/RAM):
+### nRF Connect SDK + west (альтернатива)
+
+```bash
+# Все доступные samples: https://docs.zephyrproject.org/latest/samples/index.html
+
+pip install west
+west init zephyrproject && cd zephyrproject && west update
+
+# Сборка iBeacon sample (основа для доработки)
+west build -b nrf52810pca10040 samples/bluetooth/ibeacon
+
+# Прошивка через SWD
+west flash --runner nrfjprog    # J-Link + nrfjprog
+west flash --runner openocd     # OpenOCD + CMSIS-DAP / ST-LINK
+```
+
+Минимальный `prj.conf` для Broadcaster-only (экономия Flash/RAM):
 ```kconfig
 CONFIG_BT=y
 CONFIG_BT_BROADCASTER=y
@@ -107,21 +135,6 @@ CONFIG_BT_OBSERVER=n
 CONFIG_BT_PERIPHERAL=n
 CONFIG_BT_CENTRAL=n
 CONFIG_BT_MAX_CONN=0
-```
-
-System OFF sample (deep sleep с пробуждением по GPIO/RTC):
-`samples/boards/nordic/system_off`
-
-### Вариант B: nRF5 SDK + GCC (классический)
-
-```bash
-# Установить nRF5 SDK 17.1.x в ../nrf5_sdk/
-# Установить ARM GCC toolchain
-
-cd firmware/pca10040e/s112/armgcc
-make
-make flash_softdevice   # прошить S112 один раз
-make flash              # прошить приложение
 ```
 
 ## Важно: Read-out Protection
