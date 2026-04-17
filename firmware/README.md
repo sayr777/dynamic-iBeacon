@@ -17,7 +17,7 @@
 |---|---|
 | SoC | `nRF52810` (Nordic Semiconductor) |
 | Модуль | `EBYTE E73-2G4M04S1A` |
-| Альтернативный модуль | `YJ-16013` (`nRF52832`) — прошивка идентична, меняется только таргет |
+| Альтернативный модуль | `YJ-16013` (`nRF52832`) — **рекомендуется для прототипа** (см. platform-comparison.md) |
 | SDK | `nRF5 SDK 17.1.x` (рекомендуется) или `nRF Connect SDK` (Zephyr) |
 | BLE стек | `SoftDevice S112` (только Broadcaster) |
 | Программатор | `J-LINK` / `nRF52 DK` / `ST-LINK V2` / CMSIS-DAP через `SWD` |
