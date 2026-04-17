@@ -49,11 +49,13 @@ major = out[0:2]   minor = out[2:4]   mac[3:6] = out[4:7]
 
 ## Структура проекта
 
+- [`docs/protocol.md`](docs/protocol.md) — **протокол работы**: FSM, sequence diagrams, iBeacon формат, ночной режим
+- [`docs/cost.md`](docs/cost.md) — **полная стоимость** изделия: каждый компонент, схема питания, $6.95/шт
 - [`docs/platform-comparison.md`](docs/platform-comparison.md) — сравнение nRF52832 vs nRF52810 vs JDY-23+CW32L010
 - [`docs/architecture.md`](docs/architecture.md) — архитектура изделия и режим работы
 - [`docs/algorithm.md`](docs/algorithm.md) — спецификация алгоритма смены параметров
-- [`docs/interaction-diagram.md`](docs/interaction-diagram.md) — диаграммы состояний и взаимодействия
-- [`docs/bom.md`](docs/bom.md) — полный BOM с пассивными компонентами, стоимость двух вариантов питания
+- [`docs/interaction-diagram.md`](docs/interaction-diagram.md) — диаграммы состояний и взаимодействия (Mermaid)
+- [`docs/bom.md`](docs/bom.md) — полный BOM с пассивными компонентами, оба варианта питания
 - [`docs/battery-life-estimate.md`](docs/battery-life-estimate.md) — расчёт ресурса батареи: первичная батарея vs LiPo+Solar
 - [`docs/enclosure.md`](docs/enclosure.md) — корпус и правила заливки
 - [`docs/production.md`](docs/production.md) — маршрут сборки и запуска
