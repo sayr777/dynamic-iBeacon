@@ -24,6 +24,7 @@ package main
 
 import (
 	"crypto/aes"
+	"fmt"
 	"machine"
 	"time"
 
@@ -144,16 +145,16 @@ func buildCryptoInput(tagID uint16, slot uint32) [16]byte {
 }
 
 /*
-deriveParams — вычисляет Major, Minor и MAC-суффикс из AES(KEY, input).
+deriveParams — вычисляет Major, Minor и MAC из AES(KEY, input).
 
 AES-вывод (16 байт):
-  out[0:2]  → Major
-  out[2:4]  → Minor
-  out[4:9]  → MAC suffix (5 байт, 6-й байт задаётся префиксом)
+  out[0:2]   → Major
+  out[2:4]   → Minor
+  out[4:10]  → MAC (6 байт); out[4] | 0xC0 → Random Static (bits 46-47 = 11)
 
 Major и Minor не могут быть 0 (iBeacon convention).
 */
-func deriveParams(config TagConfig, slot uint32) (major, minor uint16, macSuffix [5]byte) {
+func deriveParams(config TagConfig, slot uint32) (major, minor uint16, mac [6]byte) {
 	block := buildCryptoInput(config.TagID, slot)
 	out := aes128Encrypt(config.Key, block)
 
@@ -167,8 +168,31 @@ func deriveParams(config TagConfig, slot uint32) (major, minor uint16, macSuffix
 		minor = 1
 	}
 
-	copy(macSuffix[:], out[4:9])
+	// MAC: 6 байт из out[4..9]
+	// Старший байт (mac[0]) | 0xC0 — Random Static BLE address (bits 46-47 = 11)
+	mac[0] = out[4] | 0xC0
+	mac[1] = out[5]
+	mac[2] = out[6]
+	mac[3] = out[7]
+	mac[4] = out[8]
+	mac[5] = out[9]
 	return
+}
+
+// macString форматирует MAC как "XX:XX:XX:XX:XX:XX" (MSB первым — как в nRF Connect)
+func macString(mac [6]byte) string {
+	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X",
+		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
+}
+
+// uuidString форматирует UUID как стандартную строку xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+func uuidString(uuid [16]byte) string {
+	return fmt.Sprintf("%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+		uuid[0], uuid[1], uuid[2], uuid[3],
+		uuid[4], uuid[5],
+		uuid[6], uuid[7],
+		uuid[8], uuid[9],
+		uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15])
 }
 
 // ──────────────────────────────────────────────
@@ -219,8 +243,7 @@ func updateAdvertisement(adv *bluetooth.Advertisement, config TagConfig, slot ui
 	_ = adv.Stop()
 
 	must("configure", adv.Configure(bluetooth.AdvertisementOptions{
-		AdvertisementType: bluetooth.AdvertisingTypeNonConnInd,
-		Interval:          bluetooth.NewDuration(config.AdvertisingInterval),
+		Interval: bluetooth.NewDuration(config.AdvertisingInterval),
 		ManufacturerData: []bluetooth.ManufacturerDataElement{
 			{
 				CompanyID: 0x004C, // Apple — iBeacon
@@ -241,9 +264,9 @@ func updateAdvertisement(adv *bluetooth.Advertisement, config TagConfig, slot ui
 
 func blinkLED(times int) {
 	for i := 0; i < times; i++ {
-		led.Low() // active low
+		led.High() // active HIGH на nice!nano / ProMicro NRF52840
 		time.Sleep(50 * time.Millisecond)
-		led.High()
+		led.Low()
 		time.Sleep(50 * time.Millisecond)
 	}
 }
@@ -265,13 +288,18 @@ func must(action string, err error) {
 func main() {
 	// Инициализация LED
 	led.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	led.High() // выключен (active low)
+	led.Low() // выключен (active HIGH — LOW = off)
 
 	// Старт BLE стека
 	must("enable BLE", adapter.Enable())
 
 	adv := adapter.DefaultAdvertisement()
 	defer adv.Stop()
+
+	fmt.Println("========================================")
+	fmt.Printf("BLE Tag  TagID=%-5d  SlotDuration=%s\n", cfg.TagID, cfg.SlotDuration)
+	fmt.Printf("UUID     %s\n", uuidString(cfg.UUID))
+	fmt.Println("========================================")
 
 	// Сигнал готовности: 3 быстрых мигания
 	blinkLED(3)
@@ -282,6 +310,9 @@ func main() {
 		slot := currentSlot(cfg)
 
 		if slot != lastSlot {
+			major, minor, mac := deriveParams(cfg, slot)
+			fmt.Printf("[slot %4d] TagID=%d  Major=0x%04X  Minor=0x%04X  MAC=%s\n",
+				slot, cfg.TagID, major, minor, macString(mac))
 			updateAdvertisement(adv, cfg, slot)
 			lastSlot = slot
 		}

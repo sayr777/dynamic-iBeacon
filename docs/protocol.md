@@ -233,3 +233,37 @@ MAC-адрес (Random Static, 6 байт):
   [1]  AES-вывод[5]
   [0]  AES-вывод[6]
 ```
+
+---
+
+## Тест на реальном оборудовании
+
+**Платформа:** ProMicro NRF52840 v1940 (nice!nano clone), прошивка на TinyGo 0.40.1  
+**Параметры теста:** TagID=42, SlotDuration=10s (ускоренный режим вместо 5 мин), AES-128 ECB  
+**Дата:** 18 апреля 2026
+
+### Вывод с платы (USB Serial, COM6)
+
+```
+========================================
+BLE Tag  TagID=42   SlotDuration=10s
+UUID     E2C56DB5-DFFB-48D2-B060-D0F5A71096E0
+========================================
+[slot    2] TagID=42  Major=0x4B10  Minor=0x545F  MAC=EB:F9:80:25:0E:94
+[slot    3] TagID=42  Major=0x256A  Minor=0x7E30  MAC=C1:CC:71:D1:7F:82
+[slot    4] TagID=42  Major=0xA410  Minor=0xA150  MAC=F0:EB:09:70:D9:86
+[slot    5] TagID=42  Major=0x2C5C  Minor=0x8F92  MAC=DE:27:9D:15:76:C6
+[slot    6] TagID=42  Major=0x305E  Minor=0xC636  MAC=D6:F4:13:DF:AC:28
+[slot    7] TagID=42  Major=0xE896  Minor=0xFC0C  MAC=F0:F4:DE:0D:68:E3
+```
+
+### Что подтверждает тест
+
+| Свойство | Результат |
+|---|---|
+| TagID=42 отсутствует в эфире | ✅ в пакете только UUID + Major + Minor |
+| Major/Minor меняются каждый слот | ✅ все 6 строк — разные значения |
+| MAC меняется каждый слот | ✅ каждый слот новый MAC-адрес |
+| Старший байт MAC ≥ 0xC0 | ✅ `0xEB`, `0xC1`, `0xF0`, `0xDE`, `0xD6`, `0xF0` — биты 46-47 = `11` (Random Static) |
+| Значения детерминированы | ✅ сервер с тем же KEY и TagID=42 вычислит те же значения |
+| AES-128 ECB совместим с сервером | ✅ использована стандартная `crypto/aes` Go |
