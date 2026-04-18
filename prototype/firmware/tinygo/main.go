@@ -319,9 +319,26 @@ func main() {
 	adv := adapter.DefaultAdvertisement()
 	defer adv.Stop()
 
+	// Задержка чтобы монитор успел подключиться до первых сообщений
+	time.Sleep(2 * time.Second)
+
+	// BLE Privacy: MAC меняется автоматически каждый слот (Non-Resolvable Private Address).
+	// Вызывается после Enable(), до первого adv.Start().
+	privacyOK := false
+	if err := enableBLEPrivacy(uint16(cfg.SlotDuration.Seconds())); err != nil {
+		fmt.Printf("[privacy] ОШИБКА %s\n", err)
+	} else {
+		privacyOK = true
+		fmt.Println("[privacy] OK — Radio MAC меняется каждый слот")
+	}
+
 	fmt.Println("========================================")
 	fmt.Printf("BLE Tag v2  TagID=%-5d  SlotDuration=%s\n", cfg.TagID, cfg.SlotDuration)
-	fmt.Println("UUID/MAC динамические — меняются каждый слот")
+	if privacyOK {
+		fmt.Println("UUID + Major + Minor + MAC + RadioMAC — все динамические")
+	} else {
+		fmt.Println("UUID + Major + Minor + MAC — динамические (RadioMAC фиксирован)")
+	}
 	fmt.Println("========================================")
 
 	// Сигнал готовности: 3 быстрых мигания
@@ -329,6 +346,7 @@ func main() {
 
 	var lastSlot uint32 = ^uint32(0) // невалидный → первое обновление немедленно
 	lastBlink := time.Now().Add(-2 * time.Second) // первый blink сразу
+	firstSlot := true
 
 	for {
 		slot := currentSlot(cfg)
@@ -336,6 +354,18 @@ func main() {
 		// Обновить параметры при смене слота
 		if slot != lastSlot {
 			uuid, major, minor, mac := deriveParams(cfg, slot)
+			// При первом слоте печатаем заголовок (USB CDC к этому моменту точно готов)
+			if firstSlot {
+				fmt.Println("========================================")
+				fmt.Printf("BLE Tag v2  TagID=%-5d  SlotDuration=%s\n", cfg.TagID, cfg.SlotDuration)
+				if privacyOK {
+					fmt.Println("[privacy] OK — RadioMAC меняется каждый слот")
+				} else {
+					fmt.Println("[privacy] ОШИБКА — RadioMAC фиксирован")
+				}
+				fmt.Println("========================================")
+				firstSlot = false
+			}
 			fmt.Printf("[slot %4d] TagID=%d  Major=0x%04X  Minor=0x%04X  MAC=%s\n",
 				slot, cfg.TagID, major, minor, macString(mac))
 			fmt.Printf("           UUID=%s\n", uuidString(uuid))
