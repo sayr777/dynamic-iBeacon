@@ -32,7 +32,7 @@ def key_to_hex(key: bytes) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Генерация AES-128 ключа для региона BLE-меток"
+        description="Генерация AES-128 ключа для региона динамических iBeacon-меток"
     )
     parser.add_argument("--region", required=True,
                         help="Название региона (информационное)")
@@ -61,7 +61,7 @@ def main():
     print("=" * 60)
     print()
     print("  *** Сохранить ключ в защищённое хранилище! ***")
-    print("  *** Прошить KEY в каждый STM32L031 при производстве! ***")
+    print("  *** Прошить KEY в каждую метку при производстве! ***")
     print()
 
     if args.output:

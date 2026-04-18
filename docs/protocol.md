@@ -16,23 +16,26 @@
 ### Каждые 5 минут
 
 4. При пробуждении: `current_slot = unix_time / 300`
-5. Если `current_slot` изменился — вычисляет новые параметры: \
-   `AES-128-ECB(KEY, tag_id[2] || slot[4] || 0x00[10])` → `Major[2]`, `Minor[2]`, `MAC_suffix[3]`
-6. Обновляет `advertising payload` и `Random Static MAC` в BLE-стеке
-7. Передаёт пакет с новыми параметрами
+5. Если `current_slot` изменился — вычисляет новые параметры (2 вызова AES-128 ECB): \
+   `variant=0`: `AES(KEY, tag_id[2]|slot[4]|0x00|0x00[9])` → `UUID[16]` \
+   `variant=1`: `AES(KEY, tag_id[2]|slot[4]|0x01|0x00[9])` → `Major[2]`, `Minor[2]`, `MAC[6]`
+6. Обновляет `advertising payload` (UUID, Major, Minor, MAC) в BLE-стеке
+7. BLE Privacy (`sd_ble_gap_privacy_set`) меняет RadioMAC автоматически
+8. Передаёт пакет с новыми параметрами
 
 ### Что постоянно, что меняется
 
 | Поле | Изменяется | Период |
 |---|---|---|
-| `UUID` (16 байт) | ❌ постоянный | никогда |
+| `UUID` (16 байт) | ✅ | каждые 5 мин |
 | `Major` (2 байта) | ✅ | каждые 5 мин |
 | `Minor` (2 байта) | ✅ | каждые 5 мин |
-| `MAC`-адрес | ✅ | каждые 5 мин |
+| `MAC`-адрес (iBeacon payload) | ✅ | каждые 5 мин |
+| `RadioMAC` (BLE Privacy) | ✅ | каждые 5 мин |
 | `TAG_ID` (статичный) | ❌ | недоступен из эфира |
 
-**Сервер** по паре `(Major, Minor)` восстанавливает `TAG_ID` без хранения истории,  
-перебирая `AES128(KEY, tag_id || slot)` для всех `tag_id × [slot±1]` — < 1 мс.
+**Сервер** по тройке `(UUID, Major, Minor)` восстанавливает `TAG_ID` без хранения истории,  
+перебирая два вызова `AES128(KEY, ...)` для всех `tag_id × [slot±1]` — < 1 мс.
 
 ---
 
@@ -117,7 +120,7 @@ sequenceDiagram
         MCU  ->>  AIR  : iBeacon ch37 (330 мкс)
         MCU  ->>  AIR  : iBeacon ch38 (330 мкс)
         MCU  ->>  AIR  : iBeacon ch39 (330 мкс)
-        Note over AIR  : UUID=постоянный\nMajor/Minor/MAC=текущий слот
+        Note over AIR  : UUID/Major/Minor/MAC/RadioMAC — все текущий слот
 
         AIR  -->> SRV  : (Major, Minor, MAC, RSSI, timestamp)
 
@@ -223,18 +226,22 @@ AD-элемент (27 байт):
   [2..3]   0x4C 0x00 — Apple Company ID
   [4]      0x02  — Beacon Type
   [5]      0x15  — Beacon Length (21 байт)
-  [6..21]  UUID (16 байт, постоянный)        ← TAG_IBEACON_UUID
-  [22..23] Major (big-endian)                ← AES-вывод[0:2]
-  [24..25] Minor (big-endian)                ← AES-вывод[2:4]
-  [26]     RSSI @ 1m (−65 дБм)
+  [6..21]  UUID (16 байт)    ← AES(KEY, tag_id|slot|variant=0)   — меняется каждый слот
+  [22..23] Major (big-endian) ← AES(KEY, tag_id|slot|variant=1)[0:2]
+  [24..25] Minor (big-endian) ← AES(KEY, tag_id|slot|variant=1)[2:4]
+  [26]     RSSI @ 1m (−59 дБм)
 
-MAC-адрес (Random Static, 6 байт):
-  [5]  TAG_MAC_PREFIX[0] | 0xC0  ← биты 46..47 = '11' (BLE spec)
-  [4]  TAG_MAC_PREFIX[1]
-  [3]  TAG_MAC_PREFIX[2]
-  [2]  AES-вывод[4]               ← меняется каждые 5 мин
-  [1]  AES-вывод[5]
-  [0]  AES-вывод[6]
+MAC-адрес payload (Random Static, 6 байт):
+  mac[0] = AES_v1_out[4] | 0xC0  ← биты 46..47 = '11' (BLE spec)
+  mac[1] = AES_v1_out[5]
+  mac[2] = AES_v1_out[6]
+  mac[3] = AES_v1_out[7]
+  mac[4] = AES_v1_out[8]
+  mac[5] = AES_v1_out[9]         — все 6 байт меняются каждый слот
+
+RadioMAC (BLE Privacy, Non-Resolvable Private Address):
+  Управляется SoftDevice через sd_ble_gap_privacy_set()
+  Меняется автоматически каждый слот (cycle_s = SLOT_DURATION в секундах)
 ```
 
 ---
@@ -242,22 +249,30 @@ MAC-адрес (Random Static, 6 байт):
 ## Тест на реальном оборудовании
 
 **Платформа:** ProMicro NRF52840 v1940 (nice!nano clone), прошивка на TinyGo 0.40.1  
-**Параметры теста:** TagID=42, SlotDuration=10s (ускоренный режим вместо 5 мин), AES-128 ECB  
+**Алгоритм:** v2 — два вызова AES-128 ECB (variant=0 → UUID, variant=1 → Major+Minor+MAC), BLE Privacy  
+**Параметры теста:** TagID=42, SlotDuration=10s (ускоренный режим вместо 5 мин)  
 **Дата:** 18 апреля 2026
 
 ### Вывод с платы (USB Serial, COM6)
 
 ```
+[privacy] OK — Radio MAC меняется каждый слот
 ========================================
-BLE Tag  TagID=42   SlotDuration=10s
-UUID     E2C56DB5-DFFB-48D2-B060-D0F5A71096E0
+BLE Tag v2  TagID=42     SlotDuration=10s
+UUID + Major + Minor + MAC + RadioMAC — все динамические
 ========================================
-[slot    2] TagID=42  Major=0x4B10  Minor=0x545F  MAC=EB:F9:80:25:0E:94
-[slot    3] TagID=42  Major=0x256A  Minor=0x7E30  MAC=C1:CC:71:D1:7F:82
-[slot    4] TagID=42  Major=0xA410  Minor=0xA150  MAC=F0:EB:09:70:D9:86
-[slot    5] TagID=42  Major=0x2C5C  Minor=0x8F92  MAC=DE:27:9D:15:76:C6
-[slot    6] TagID=42  Major=0x305E  Minor=0xC636  MAC=D6:F4:13:DF:AC:28
-[slot    7] TagID=42  Major=0xE896  Minor=0xFC0C  MAC=F0:F4:DE:0D:68:E3
+========================================
+BLE Tag v2  TagID=42     SlotDuration=10s
+[privacy] OK — RadioMAC меняется каждый слот
+========================================
+[slot    0] TagID=42  Major=0xD30B  Minor=0x576E  MAC=D0:27:FA:BD:AC:F3
+           UUID=FF352EFE-AF47-1F28-CA03-C13FC3235B8F
+[slot    1] TagID=42  Major=0xE4B9  Minor=0xE7CA  MAC=E9:B6:FB:6E:2F:50
+           UUID=DEEAEB01-216B-BAE2-51D1-335F754CCB9F
+[slot    2] TagID=42  Major=0xC2CB  Minor=0x2A0D  MAC=C6:7E:54:D9:C7:96
+           UUID=4B10545F-EBF9-8025-0E94-A221791C0CBF
+[slot    3] TagID=42  Major=0x7E33  Minor=0x588D  MAC=E3:81:D9:1C:C4:AB
+           UUID=256A7E30-81CC-71D1-7F82-953428525AF2
 ```
 
 ### Что подтверждает тест
@@ -265,8 +280,10 @@ UUID     E2C56DB5-DFFB-48D2-B060-D0F5A71096E0
 | Свойство | Результат |
 |---|---|
 | TagID=42 отсутствует в эфире | ✅ в пакете только UUID + Major + Minor |
-| Major/Minor меняются каждый слот | ✅ все 6 строк — разные значения |
-| MAC меняется каждый слот | ✅ каждый слот новый MAC-адрес |
-| Старший байт MAC ≥ 0xC0 | ✅ `0xEB`, `0xC1`, `0xF0`, `0xDE`, `0xD6`, `0xF0` — биты 46-47 = `11` (Random Static) |
+| UUID меняется каждый слот | ✅ все слоты — разные UUID |
+| Major/Minor меняются каждый слот | ✅ все слоты — разные значения |
+| MAC (iBeacon payload) меняется каждый слот | ✅ все 6 байт меняются |
+| Старший байт MAC ≥ 0xC0 | ✅ `0xD0`, `0xE9`, `0xC6`, `0xE3` — биты 46-47 = `11` (Random Static) |
+| RadioMAC (BLE Privacy) меняется каждый слот | ✅ `[privacy] OK` подтверждён |
 | Значения детерминированы | ✅ сервер с тем же KEY и TagID=42 вычислит те же значения |
 | AES-128 ECB совместим с сервером | ✅ использована стандартная `crypto/aes` Go |

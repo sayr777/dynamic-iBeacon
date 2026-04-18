@@ -2,7 +2,7 @@
 
 ## Назначение
 
-Динамическая BLE-метка для автономной передачи `iBeacon`-посылок, в которых `Major`, `Minor` и `MAC`-адрес меняются каждые `5 мин`. Сервер, знающий ключ, **однозначно восстанавливает статичный идентификатор метки** по паре `(Major, Minor)`.
+Динамическая BLE-метка для автономной передачи `iBeacon`-посылок, в которых **UUID, Major, Minor, MAC и RadioMAC** меняются каждые `5 мин`. Сервер, знающий ключ, **однозначно восстанавливает статичный идентификатор метки** по тройке `(UUID, Major, Minor)`.
 
 ## Выбранная платформа
 
@@ -27,11 +27,12 @@
 
 1. `RTC` (`LFXO 32768 Гц`) будит `nRF52832` из `System OFF / deep sleep`.
 2. `cycle_count++`.
-3. Если `cycle_count >= CYCLES_PER_SLOT` — выполнить обновление параметров (п. 4–7).
+3. Если `cycle_count >= CYCLES_PER_SLOT` — выполнить обновление параметров (п. 4–8).
 4. `cycle_count = 0`, `slot++`.
-5. `block = tag_id || slot || 0x00_pad`.
-6. `out = AES128(KEY, block)` → `major = out[0:2]`, `minor = out[2:4]`, `mac[3:6] = out[4:7]`.
-7. Обновить `advertising data` и `MAC` в стеке BLE.
+5. `block0 = tag_id || slot || 0x00 || pad` → `uuid = AES128(KEY, block0)` (variant=0).
+6. `block1 = tag_id || slot || 0x01 || pad` → `out = AES128(KEY, block1)` (variant=1).
+7. `major = out[0:2]`, `minor = out[2:4]`, `mac[0:6] = out[4:10]`, `mac[0] |= 0xC0`.
+8. Обновить `advertising data` (UUID, Major, Minor, MAC) в стеке BLE. RadioMAC меняет BLE Privacy автоматически.
 8. Запустить один `advertising event` (3 канала, ~1 мс).
 9. Перейти в `deep sleep` до следующего `RTC`-будильника (`+2 с`).
 
