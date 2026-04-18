@@ -17,7 +17,13 @@ prototype/firmware/
 ├── README.md                          — этот файл
 └── tinygo/
     ├── go.mod                         — Go module (tinygo.org/x/bluetooth)
-    └── main.go                        — полное приложение (AES-128 + iBeacon + LED)
+    ├── main.go                        — полное приложение (AES-128 v2 + iBeacon + LED)
+    ├── privacy.go                     — BLE Privacy через CGo (sd_ble_gap_privacy_set)
+    └── softdevice_include/            — заголовки SoftDevice s140v7 для CGo
+        ├── ble_gap.h
+        ├── ble.h
+        ├── nrf_svc.h
+        └── ...
 ```
 
 ---
@@ -72,7 +78,27 @@ tinygo monitor -port COM8
 | Событие | Мигания |
 |---|---|
 | Старт (BLE готов) | 3 раза |
-| Обновление слота (каждые 10 сек в тестовом режиме) | 2 раза |
+| Каждые 2 секунды | 1 раз (heartbeat) |
+
+### Ожидаемый вывод (алгоритм v2, подтверждено 18 апреля 2026)
+
+```
+[privacy] OK — Radio MAC меняется каждый слот
+========================================
+BLE Tag v2  TagID=42     SlotDuration=10s
+UUID + Major + Minor + MAC + RadioMAC — все динамические
+========================================
+[slot    0] TagID=42  Major=0xD30B  Minor=0x576E  MAC=D0:27:FA:BD:AC:F3
+           UUID=FF352EFE-AF47-1F28-CA03-C13FC3235B8F
+[slot    1] TagID=42  Major=0xE4B9  Minor=0xE7CA  MAC=E9:B6:FB:6E:2F:50
+           UUID=DEEAEB01-216B-BAE2-51D1-335F754CCB9F
+[slot    2] TagID=42  Major=0xC2CB  Minor=0x2A0D  MAC=C6:7E:54:D9:C7:96
+           UUID=4B10545F-EBF9-8025-0E94-A221791C0CBF
+[slot    3] TagID=42  Major=0x7E33  Minor=0x588D  MAC=E3:81:D9:1C:C4:AB
+           UUID=256A7E30-81CC-71D1-7F82-953428525AF2
+```
+
+Если `[privacy]` показывает ошибку — RadioMAC фиксирован, остальные параметры всё равно динамические.
 
 ### Параметры по умолчанию (для отладки)
 
@@ -90,9 +116,10 @@ SlotDuration: 5 * time.Minute,  // production
 ### Проверка в nRF Connect
 
 1. Открыть nRF Connect на смартфоне
-2. Найти устройство с UUID `E2C56DB5-DFFB-48D2-B060-D0F5A71096E0`
-3. Major и Minor меняются каждые 10 секунд (в тестовом режиме)
+2. UUID меняется каждые 10 секунд — устройство каждый раз появляется с новым UUID
+3. Major, Minor и MAC — тоже меняются каждый слот
 4. Manufacturer: Apple (0x004C) — стандартный iBeacon
+5. RadioMAC (адрес устройства в сканере) — тоже меняется благодаря BLE Privacy
 
 ---
 
