@@ -889,17 +889,26 @@ async function startScan() {
     setScanStatus('error','Web Bluetooth Scan не поддерживается');
     return;
   }
+  const keyStr = document.getElementById('s-key').value.trim();
+  if (!/^[0-9a-fA-F]{32}$/.test(keyStr)) {
+    setScanStatus('error','Введите корректный KEY (32 hex)');
+    return;
+  }
   document.getElementById('s-btn').disabled=true;
   try {
-    const ok = await buildScanTable();
-    if (!ok) {
-      setScanStatus('error','Введите корректный KEY (32 hex)');
-      document.getElementById('s-btn').disabled=false;
-      return;
-    }
+    // 1. Запрашиваем разрешение BLE сразу — пока жест пользователя ещё активен
     setScanStatus('scanning','Запрос разрешения BLE…');
     bleScan = await navigator.bluetooth.requestLEScan({
       acceptAllAdvertisements:true, keepRepeatedDevices:true });
+
+    // 2. После получения разрешения строим таблицу
+    const ok = await buildScanTable();
+    if (!ok) {
+      bleScan.stop(); bleScan=null;
+      setScanStatus('error','Ошибка сборки таблицы');
+      document.getElementById('s-btn').disabled=false;
+      return;
+    }
     scanning=true;
     document.getElementById('s-btn').disabled=false;
     document.getElementById('s-btn').textContent='⏹ Остановить';
