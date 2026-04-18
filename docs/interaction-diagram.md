@@ -1,6 +1,6 @@
 ﻿# Диаграммы взаимодействия
 
-Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)**.  
+Платформа: **[YJ-16013](../specs/YJ-16013-datasheet.pdf) (nRF52832)**.  
 Подробный протокол: [`protocol.md`](protocol.md)
 
 ---
@@ -159,3 +159,5 @@ sequenceDiagram
 Среднесуточный (17 ч день + 7 ч ночь):
   I = (5.22×17 + 2.59×7) / 24     = 4.40 µА
 ```
+
+

@@ -1,15 +1,16 @@
 ﻿# Компоненты: даташиты и закупка
 
-Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)** + **ER14505H-LD**.  
+Платформа: **[YJ-16013](YJ-16013-datasheet.pdf) (nRF52832)** + **ER14505H-LD**.  
 Все ссылки проверены. Альтернативные поставщики указаны где возможно.
 
 ---
 
 ## BLE-модуль
 
-### [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832, основной)
+### [YJ-16013](YJ-16013-datasheet.pdf) (nRF52832, основной)
 
-Локальная карточка модуля в проекте: [`specs/yj-16013.md`](yj-16013.md)
+Локальная копия даташита: [`specs/YJ-16013-datasheet.pdf`](YJ-16013-datasheet.pdf)  
+Краткое описание модуля в проекте: [`specs/yj-16013.md`](yj-16013.md)
 
 | Параметр | Значение |
 |---|---|
@@ -218,3 +219,5 @@
 | Bluetooth Assigned Numbers | Company ID 0x004C = Apple | [Bluetooth SIG](https://www.bluetooth.com/specifications/assigned-numbers/) |
 
 Спецификация алгоритма применительно к проекту: [`docs/algorithm.md`](../docs/algorithm.md)
+
+

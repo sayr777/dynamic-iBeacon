@@ -2,7 +2,7 @@
 
 ## Сравнительная таблица
 
-| Критерий | ProMicro NRF52840 (прототип) | [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) nRF52832 (производство) |
+| Критерий | ProMicro NRF52840 (прототип) | [YJ-16013](../../specs/YJ-16013-datasheet.pdf) nRF52832 (производство) |
 |---|---|---|
 | **Цель** | проверка алгоритма, отладка | серийное изделие |
 | **SoC** | `nRF52840` | `nRF52832` |
@@ -65,7 +65,9 @@ TX (2 с интервал)      2.65 µА          TX (2 с интервал)   
 | Шаг | Действие |
 |---|---|
 | 1 | Убедиться что алгоритм работает на прототипе |
-| 2 | Заказать [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) + компоненты по [`../docs/cost.md`](../docs/cost.md) |
+| 2 | Заказать [YJ-16013](../../specs/YJ-16013-datasheet.pdf) + компоненты по [`../docs/cost.md`](../docs/cost.md) |
 | 3 | Перенести прошивку: заменить `tag_platform_nrf52840_promicro.c` → `tag_platform_nrf52832.c` |
 | 4 | Настроить `TAG_ENABLE_APPROTECT=1` перед производственной прошивкой |
 | 5 | Собрать PCB, прошить через J-LINK SWD |
+
+
