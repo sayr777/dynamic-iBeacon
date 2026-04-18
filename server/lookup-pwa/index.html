@@ -153,17 +153,6 @@
     .rv { color: var(--text); font-weight: 600; }
     .result-hint { font-size: .78rem; color: var(--yellow); }
 
-    /* ── Details collapsible ── */
-    details { border: 1px solid var(--border); border-radius: 8px; }
-    summary { padding: 9px 13px; cursor: pointer; font-size: .78rem;
-      color: var(--muted); background: var(--surface2);
-      user-select: none; list-style: none;
-      display: flex; justify-content: space-between; border-radius: 8px; }
-    details[open] summary { border-radius: 8px 8px 0 0; }
-    summary::after { content: '▸'; transition: transform .2s; }
-    details[open] summary::after { transform: rotate(90deg); }
-    details .inner { padding: 13px; display: flex; flex-direction: column; gap: 11px; }
-
     /* ── Algorithm ── */
     .algo-section { display: flex; flex-direction: column; gap: 12px; }
     .algo-block { background: var(--surface2); border: 1px solid var(--border);
@@ -240,7 +229,7 @@
 
 <header>
   <h1>📡 Локатор динамических меток iBeacon</h1>
-  <p>Идентификация меток по Major · Minor · AES-128</p>
+  <p>Идентификация меток по Major · Minor · AES-128 ECB</p>
 </header>
 
 <div class="tabs">
@@ -255,7 +244,7 @@
 
   <!-- Ввод Major / Minor -->
   <div class="card lookup-card">
-    <div class="card-title">Данные из эфира iBeacon</div>
+    <div class="card-title">📡 Данные из эфира iBeacon</div>
 
     <div class="row field-major-minor">
       <div class="field">
@@ -272,17 +261,26 @@
       </div>
     </div>
 
-    <!-- AES-128 KEY -->
-    <div class="field">
-      <label>AES-128 ключ</label>
-      <div class="key-row">
-        <input id="l-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
-          maxlength="32" autocomplete="off" spellcheck="false"
-          oninput="onKeyInput(this)">
-        <button class="btn-sm" onclick="fillTestKey()"
-          title="Заполнить ключом из прошивки прототипа (TagID=42)">ТЕСТ</button>
+    <!-- AES-128 KEY + Слот -->
+    <div class="row" style="align-items:flex-end">
+      <div class="field" style="flex:3">
+        <label>AES-128 ключ</label>
+        <div class="key-row">
+          <input id="l-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
+            maxlength="32" autocomplete="off" spellcheck="false"
+            oninput="onKeyInput(this)">
+          <button class="btn-sm" onclick="fillTestKey()"
+            title="Заполнить ключом из прошивки прототипа (TagID=42)">ТЕСТ</button>
+        </div>
+        <div class="hint" id="l-key-hint"></div>
       </div>
-      <div class="hint" id="l-key-hint"></div>
+      <div class="field" style="flex:1;min-width:90px">
+        <label>Слот ≈</label>
+        <input id="l-slot-hint" type="number" placeholder="авто" min="0"
+          inputmode="numeric" autocomplete="off"
+          title="Номер слота из монитора ([slot N]). Поиск ±100 вокруг него."
+          oninput="scheduleAutoSearch()">
+      </div>
     </div>
 
     <!-- Индикатор поиска -->
@@ -297,64 +295,27 @@
       <div class="result-body" id="l-rbody"></div>
     </div>
 
-    <!-- Расширенные параметры -->
-    <details id="l-advanced" style="display:none">
-      <summary>Параметры поиска
-        <span style="font-family:var(--mono);color:var(--accent2);
-          margin-left:4px;font-size:.75rem" id="l-ops-badge"></span>
-      </summary>
-      <div class="inner">
-        <div class="row">
-          <div class="field">
-            <label>Режим</label>
-            <select id="l-mode" onchange="onLookupModeChange()">
-              <option value="proto">Прототип (uptime / 10 с)</option>
-              <option value="prod">Production (unix / 300 с)</option>
-            </select>
-          </div>
-        </div>
-        <div class="row" id="l-slot-row">
-          <div class="field"><label>Слоты от</label>
-            <input id="l-smin" type="number" value="0" min="0"
-              oninput="updateOps()"></div>
-          <div class="field"><label>Слоты до</label>
-            <input id="l-smax" type="number" value="1000" min="1"
-              oninput="updateOps()"></div>
-        </div>
-        <div id="l-prod-hint" class="hint" style="display:none">
-          Текущий слот: <span id="l-cur-slot"
-            style="font-family:var(--mono);color:var(--accent2)">—</span>
-          · поиск ±5 от текущего
-        </div>
-        <div class="row">
-          <div class="field"><label>TagID от</label>
-            <input id="l-tmin" type="number" value="0" min="0" max="65535"
-              oninput="updateOps()"></div>
-          <div class="field"><label>TagID до</label>
-            <input id="l-tmax" type="number" value="100" min="1" max="65535"
-              oninput="updateOps()"></div>
-        </div>
-        <div class="field">
-          <label>UUID (необязательно — ускоряет поиск, 32 hex)</label>
-          <input id="l-uuid" placeholder="DEEAEB01216BBAE251D1335F754CCB9F"
-            maxlength="36" autocomplete="off" spellcheck="false"
-            oninput="this.value=this.value.replace(/[^0-9a-fA-F\-]/g,'').toUpperCase();scheduleAutoSearch()">
-        </div>
-        <p class="hint">Операций: <b id="l-ops">—</b> · ~<b id="l-time">—</b></p>
-      </div>
-    </details>
   </div>
 
   <!-- Справочник остановок -->
   <div class="card">
-    <div class="card-title">Справочник остановок</div>
-    <div id="l-stops-table" style="display:flex;flex-direction:column;gap:6px"></div>
-    <p class="hint">Справочник встроен в приложение. TagID ↔ название остановки.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title">📋 Справочник остановок</div>
+      <button class="btn-sm" id="stops-toggle" onclick="toggleStops()">развернуть</button>
+    </div>
+    <div id="l-stops-body" style="display:none">
+      <div id="l-stops-table" style="display:flex;flex-direction:column;gap:6px"></div>
+      <p class="hint">Справочник встроен в приложение. TagID ↔ название остановки.</p>
+    </div>
   </div>
 
   <!-- Алгоритм -->
   <div class="card">
-    <div class="card-title">Алгоритм идентификации</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title">🔐 Алгоритм идентификации</div>
+      <button class="btn-sm" id="algo-toggle" onclick="toggleAlgo()">развернуть</button>
+    </div>
+    <div id="l-algo-body" style="display:none">
     <div class="algo-section">
 
       <div class="algo-block">
@@ -452,6 +413,7 @@ for s in [slot_now-1, slot_now, slot_now+1]:
       </div>
 
     </div>
+    </div>
   </div>
 
 </div>
@@ -462,7 +424,7 @@ for s in [slot_now-1, slot_now, slot_now+1]:
 <div class="panel" id="panel-scanner">
 
   <div class="card">
-    <div class="card-title">Настройки сканера</div>
+    <div class="card-title">⚙️ Настройки сканера</div>
     <div class="field">
       <label>AES-128 ключ (KEY)</label>
       <div class="key-row">
@@ -514,7 +476,7 @@ for s in [slot_now-1, slot_now, slot_now+1]:
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div class="card-title">Устройства
+      <div class="card-title">📶 Устройства
         <span id="s-count" style="color:var(--accent2);margin-left:6px">0</span>
       </div>
       <button class="btn-sm" onclick="clearDevices()">очистить</button>
@@ -584,6 +546,22 @@ function renderStopDirectory() {
 }
 renderStopDirectory();
 
+function toggleStops() {
+  const body = document.getElementById('l-stops-body');
+  const btn  = document.getElementById('stops-toggle');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  btn.textContent    = open ? 'развернуть' : 'свернуть';
+}
+
+function toggleAlgo() {
+  const body = document.getElementById('l-algo-body');
+  const btn  = document.getElementById('algo-toggle');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  btn.textContent    = open ? 'развернуть' : 'свернуть';
+}
+
 // ══════════════════════════════════════════════════════
 // Вкладки
 // ══════════════════════════════════════════════════════
@@ -620,7 +598,6 @@ function onKeyInput(el) {
   _keyCache.clear();
   const hint = document.getElementById('l-key-hint');
   if (hint) hint.textContent = '';
-  updateOps();
   scheduleAutoSearch();
 }
 
@@ -681,39 +658,16 @@ function scheduleAutoSearch() {
   lDebounce = setTimeout(runAutoSearch, 420);
 }
 
-function getSlotRange() {
-  const mode = document.getElementById('l-mode').value;
-  if (mode==='prod') {
-    const c = Math.floor(Date.now()/1000/300);
-    return {min:Math.max(0,c-5), max:c+5};
-  }
-  return {
-    min: parseInt(document.getElementById('l-smin').value)||0,
-    max: parseInt(document.getElementById('l-smax').value)||1000
-  };
-}
+// Диапазон TagID
+const SEARCH_TAG_MIN = 0;
+const SEARCH_TAG_MAX = 100;
 
-function updateOps() {
-  const tMin=parseInt(document.getElementById('l-tmin').value)||0;
-  const tMax=parseInt(document.getElementById('l-tmax').value)||100;
-  const {min:sMin,max:sMax}=getSlotRange();
-  const ops=(tMax-tMin+1)*(sMax-sMin+1);
-  document.getElementById('l-ops').textContent=ops.toLocaleString('ru');
-  const ms=ops/500000*1000;
-  document.getElementById('l-time').textContent=
-    ms<100?'< 0.1 с':ms<1000?(ms/1000).toFixed(1)+' с':(ms/1000).toFixed(0)+' с';
-  document.getElementById('l-ops-badge').textContent=
-    '~'+(ops>1e6?(ops/1e6).toFixed(1)+'M':ops>1e3?(ops/1e3).toFixed(0)+'K':ops)+' ops';
-}
-
-function onLookupModeChange() {
-  const prod = document.getElementById('l-mode').value==='prod';
-  document.getElementById('l-slot-row').style.display  = prod?'none':'';
-  document.getElementById('l-prod-hint').style.display = prod?'block':'none';
-  if (prod) document.getElementById('l-cur-slot').textContent =
-    Math.floor(Date.now()/1000/300);
-  updateOps();
-  scheduleAutoSearch();
+// Диапазон слотов: если пользователь ввёл слот ≈ N → ищем [N-100, N+100]
+// иначе 0..1000 (первые ~2.7 ч работы прошивки)
+function getSearchSlotRange() {
+  const v = parseInt(document.getElementById('l-slot-hint').value);
+  if (!isNaN(v) && v >= 0) return { slotMin: Math.max(0, v - 100), slotMax: v + 100 };
+  return { slotMin: 0, slotMax: 1000 };
 }
 
 async function runAutoSearch() {
@@ -721,7 +675,6 @@ async function runAutoSearch() {
   const minorVal = document.getElementById('l-minor').value.trim();
   const keyStr   = document.getElementById('l-key').value.trim();
 
-  // Нужны оба числа и валидный ключ
   if (!majorVal || !minorVal) return;
 
   const major = parseInt(majorVal, 10);
@@ -739,19 +692,11 @@ async function runAutoSearch() {
   }
   document.getElementById('l-key').classList.remove('error');
 
-  const uuidRaw = document.getElementById('l-uuid').value.trim().replace(/-/g,'');
-  const uuid = uuidRaw.length===32 && /^[0-9a-fA-F]{32}$/.test(uuidRaw)
-    ? uuidRaw.toUpperCase() : null;
-
-  const tMin = parseInt(document.getElementById('l-tmin').value)||0;
-  const tMax = parseInt(document.getElementById('l-tmax').value)||100;
-  const {min:sMin, max:sMax} = getSlotRange();
-
-  // Показываем индикатор
   const sr = document.getElementById('l-searching');
   sr.classList.add('active');
+  const { slotMin: SEARCH_SLOT_MIN, slotMax: SEARCH_SLOT_MAX } = getSearchSlotRange();
   document.getElementById('l-searching-txt').textContent =
-    `Поиск TagID ${tMin}..${tMax}, слоты ${sMin}..${sMax}…`;
+    `Поиск TagID ${SEARCH_TAG_MIN}..${SEARCH_TAG_MAX}, слоты ${SEARCH_SLOT_MIN}..${SEARCH_SLOT_MAX}…`;
   document.getElementById('l-result').classList.remove('visible','found','notfound');
 
   if (lWorker) { lWorker.terminate(); lWorker = null; }
@@ -785,8 +730,9 @@ async function runAutoSearch() {
   };
 
   lWorker.postMessage({
-    keyHex:keyStr, uuid, major, minor,
-    tagMin:tMin, tagMax:tMax, slotMin:sMin, slotMax:sMax
+    keyHex: keyStr, uuid: null, major, minor,
+    tagMin: SEARCH_TAG_MIN, tagMax: SEARCH_TAG_MAX,
+    slotMin: SEARCH_SLOT_MIN, slotMax: SEARCH_SLOT_MAX
   });
 }
 
@@ -1066,12 +1012,6 @@ async function simulateScan() {
 // ══════════════════════════════════════════════════════
 // Инициализация
 // ══════════════════════════════════════════════════════
-setInterval(()=>{
-  if (document.getElementById('l-mode').value==='prod')
-    document.getElementById('l-cur-slot').textContent = Math.floor(Date.now()/1000/300);
-}, 10000);
-
-updateOps();
 updateScanTableSize();
 </script>
 </body>
