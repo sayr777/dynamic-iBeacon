@@ -261,26 +261,25 @@
       </div>
     </div>
 
-    <!-- AES-128 KEY + Слот -->
-    <div class="row" style="align-items:flex-end">
-      <div class="field" style="flex:3">
-        <label>AES-128 ключ</label>
-        <div class="key-row">
-          <input id="l-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
-            maxlength="32" autocomplete="off" spellcheck="false"
-            oninput="onKeyInput(this)">
-          <button class="btn-sm" onclick="fillTestKey()"
-            title="Заполнить ключом из прошивки прототипа (TagID=42)">ТЕСТ</button>
-        </div>
-        <div class="hint" id="l-key-hint"></div>
+    <!-- AES-128 KEY -->
+    <div class="field">
+      <label>AES-128 ключ</label>
+      <div class="key-row">
+        <input id="l-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
+          maxlength="32" autocomplete="off" spellcheck="false"
+          oninput="onKeyInput(this)">
+        <button class="btn-sm" onclick="fillTestKey()"
+          title="Заполнить ключом из прошивки прототипа (TagID=42)">ТЕСТ</button>
       </div>
-      <div class="field" style="flex:1;min-width:90px">
-        <label>Слот ≈</label>
-        <input id="l-slot-hint" type="number" placeholder="авто" min="0"
-          inputmode="numeric" autocomplete="off"
-          title="Номер слота из монитора ([slot N]). Поиск ±100 вокруг него."
-          oninput="scheduleAutoSearch()">
-      </div>
+      <div class="hint" id="l-key-hint"></div>
+    </div>
+
+    <!-- Слот -->
+    <div class="field">
+      <label>Слот ≈ <span style="font-weight:400;color:var(--muted)">(из монитора: [slot N], поиск ±100)</span></label>
+      <input id="l-slot-hint" type="number" placeholder="авто — слоты 0..1000"
+        min="0" inputmode="numeric" autocomplete="off"
+        oninput="scheduleAutoSearch()">
     </div>
 
     <!-- Индикатор поиска -->
