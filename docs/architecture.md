@@ -6,13 +6,13 @@
 
 ## Выбранная платформа
 
-**[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832)** — программируемый BLE-модуль на `nRF52832` (Nordic Semiconductor).
+**[YJ-16013](../specs/YJ-16013-datasheet.pdf)** — программируемый BLE-модуль на `nRF52832` (Nordic Semiconductor).
 
 Однокристальное решение даёт полный контроль над каждым рекламным пакетом: `Major`, `Minor`, `MAC`, интервал и `TX power`.
 
 ## Основные узлы
 
-- BLE-модуль [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (SoC `nRF52832`, 512 KB Flash / 64 KB RAM)
+- BLE-модуль [YJ-16013](../specs/YJ-16013-datasheet.pdf) (SoC `nRF52832`, 512 KB Flash / 64 KB RAM)
 - LDO `MCP1700T-3002E/TT` — `3.0 В`, `Iq ~1 µА`
 - диод Шотки `BAT54` — защита от переполюсовки
 - батарея `FANSO ER14505H-LD` с выводами под пайку
@@ -82,10 +82,12 @@ ER14505H-LD (+3.6 В)
 
 Аппаратная часть близка к [`ble-tag-e73`](../../ble-tag-e73): тот же LDO, батарея, корпус. Прошивка отличается:
 
-| | `ble-tag-e73` | **ble-tag-jdy23-dynamic** |
+| | `ble-tag-e73` | **dynamic-iBeacon** |
 |---|---|---|
-| Модуль | E73 (nRF52832) | [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832) |
+| Модуль | E73 (nRF52832) | [YJ-16013](../specs/YJ-16013-datasheet.pdf) (nRF52832) |
 | Режим BLE | Observer + Broadcaster | Только Broadcaster |
 | Параметры рекламы | фиксированные | AES-ротация каждый слот |
 | Протокол | двунаправленный БНСО | одностороннее beacon |
 | SoftDevice | S132 | S112 (только Broadcaster) |
+
+

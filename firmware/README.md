@@ -1,4 +1,4 @@
-﻿# Прошивка nRF52832 ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))
+﻿# Прошивка nRF52832 ([YJ-16013](../specs/YJ-16013-datasheet.pdf))
 
 ## Назначение
 
@@ -16,7 +16,7 @@
 | Параметр | Значение |
 |---|---|
 | SoC | `nRF52832` (Nordic Semiconductor) |
-| Модуль | EBYTE [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) |
+| Модуль | EBYTE [YJ-16013](../specs/YJ-16013-datasheet.pdf) |
 | Альтернативный модуль | `E73-2G4M04S1A` (`nRF52810`) — для серийного производства 1000+ шт |
 | SDK | `nRF5 SDK 17.1.x` (рекомендуется) или `nRF Connect SDK` (Zephyr) |
 | BLE стек | `SoftDevice S112` (только Broadcaster) |
@@ -71,7 +71,7 @@ firmware/
 
 ## Отличие от ble-tag-e73
 
-| | `ble-tag-e73` | **ble-tag-jdy23-dynamic** |
+| | `ble-tag-e73` | **dynamic-iBeacon** |
 |---|---|---|
 | `SoftDevice` | `S132` (Observer + Broadcaster) | `S112` (только Broadcaster) |
 | Режим BLE | scan window 30 мс + advertising | advertising only |
@@ -147,3 +147,5 @@ CONFIG_BT_MAX_CONN=0
 // Прошивка активирует защиту при первом старте.
 // После этого KEY нельзя прочитать через SWD.
 ```
+
+

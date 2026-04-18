@@ -1,13 +1,13 @@
-﻿# Динамическая BLE-метка на nRF52832 ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))
+﻿# Динамическая BLE-метка на nRF52832 ([YJ-16013](specs/YJ-16013-datasheet.pdf))
 
 Автономная динамическая BLE-метка, которая меняет **UUID, Major, Minor, MAC и RadioMAC** каждые `5 мин`. При знании секретного ключа сервер **однозначно восстанавливает статичный идентификатор метки** по UUID + Major + Minor без хранения истории.
 
-## Выбранная платформа: nRF52832 ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))
+## Выбранная платформа: nRF52832 ([YJ-16013](specs/YJ-16013-datasheet.pdf))
 
 | Параметр | Значение |
 |---|---|
 | Чип | `nRF52832` (Nordic Semiconductor, ARM Cortex-M4F) |
-| Модуль | [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (512 KB Flash / 64 KB RAM) |
+| Модуль | [YJ-16013](specs/YJ-16013-datasheet.pdf) (512 KB Flash / 64 KB RAM) |
 | SDK | `nRF5 SDK 17.1.x`, SoftDevice `S112` |
 | Средний ток | **~5.2 µА** |
 | Ресурс батареи `ER14505H` | **~15–20 лет** (ограничен саморазрядом) |
@@ -60,6 +60,7 @@ mac[0] |= 0xC0  # Random Static BLE address (биты 46-47 = 11)
 
 - [`docs/protocol.md`](docs/protocol.md) — **протокол работы**: FSM, sequence diagrams, iBeacon формат, ночной режим
 - [`docs/cost.md`](docs/cost.md) — **полная стоимость** изделия: каждый компонент, схема питания, $6.95/шт
+- [`docs/business-local-positioning.md`](docs/business-local-positioning.md) — бизнес-документ для заказчика по локальному позиционированию остановок
 - [`docs/architecture.md`](docs/architecture.md) — архитектура изделия и режим работы
 - [`docs/algorithm.md`](docs/algorithm.md) — спецификация алгоритма смены параметров
 - [`docs/interaction-diagram.md`](docs/interaction-diagram.md) — диаграммы состояний и взаимодействия (Mermaid)
@@ -87,6 +88,8 @@ mac[0] |= 0xC0  # Random Static BLE address (биты 46-47 = 11)
 | Проект | Платформа | Назначение |
 |---|---|---|
 | [`ble-tag-e73`](../ble-tag-e73) | E73 / nRF52832 | Двунаправленная метка, протокол БНСО |
-| **ble-tag-jdy23-dynamic** | **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) / nRF52832** | **Динамическая метка с AES-ротацией** |
+| **[dynamic-iBeacon](../dynamic-iBeacon)** | **[YJ-16013](specs/YJ-16013-datasheet.pdf) / nRF52832** | **Динамическая метка с AES-ротацией** |
 
 Прошивка данного проекта строится на платформе `ble-tag-e73`. Ключевое отличие: вместо приёма команд — периодическая смена `Major/Minor/MAC` по `AES-128`.
+
+

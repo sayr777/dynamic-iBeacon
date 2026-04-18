@@ -1,6 +1,6 @@
 ﻿# Электрическая схема
 
-Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)**.
+Платформа: **[YJ-16013](../specs/YJ-16013-datasheet.pdf) (nRF52832)**.
 
 ## Цепь питания
 
@@ -40,7 +40,7 @@ J-LINK / nRF52 DK / ST-LINK V2:
 | Net | Описание |
 |---|---|
 | `VBAT` | напряжение батареи до диода и LDO (3.3–3.6 В) |
-| `VDD_3V0` | стабилизированное питание 3.0 В → [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) |
+| `VDD_3V0` | стабилизированное питание 3.0 В → [YJ-16013](../specs/YJ-16013-datasheet.pdf) |
 | `SWDIO` | SWD данные |
 | `SWDCLK` | SWD тактирование |
 | `RESET` | сброс nRF52832 (активный низкий) |
@@ -63,5 +63,7 @@ J-LINK / nRF52 DK / ST-LINK V2:
 
 - `CBUF` — физически ближе к батарейному входу LDO;
 - `C_IN`, `C_OUT`, `C2` — максимально близко к соответствующим пинам;
-- антенная зона [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) — без металла, без компаунда, зазор ≥ 10 мм от корпуса;
+- антенная зона [YJ-16013](../specs/YJ-16013-datasheet.pdf) — без металла, без компаунда, зазор ≥ 10 мм от корпуса;
 - тест-точки `SWDIO`, `SWDCLK`, `RESET`, `GND`, `VDD` — доступны до заливки компаундом.
+
+

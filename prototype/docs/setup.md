@@ -182,7 +182,7 @@ tinygo version
 
 ```bash
 git clone <url-репозитория>
-cd ble-tag-jdy23-dynamic/prototype/firmware/tinygo
+cd dynamic-iBeacon/prototype/firmware/tinygo
 ```
 
 Загрузить Go-зависимости:
@@ -486,7 +486,7 @@ slot = unix_time / 300         // 300 секунд = 5 минут
   └──────────────────────────────────────────┘
 ```
 
-В production для `nRF52832` на [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) вместо `sleep 100ms` используется  
+В production для `nRF52832` на [YJ-16013](../../specs/YJ-16013-datasheet.pdf) вместо `sleep 100ms` используется  
 `sd_power_system_off()` + пробуждение по RTC каждые 2 секунды.
 
 ### iBeacon-пакет в эфире
@@ -637,3 +637,5 @@ lsof /dev/cu.usbmodem* | awk 'NR>1 {print $2}' | xargs kill -9
 
 Это ложная ошибка — загрузчик намеренно «обрывает» соединение после получения файла.  
 Убедитесь что диск исчез и плата перезагрузилась. Прошивка записана корректно.
+
+

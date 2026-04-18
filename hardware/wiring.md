@@ -1,8 +1,8 @@
 ﻿# Подключение компонентов
 
-Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)**.
+Платформа: **[YJ-16013](../specs/YJ-16013-datasheet.pdf) (nRF52832)**.
 
-## Распиновка [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (используемые пины)
+## Распиновка [YJ-16013](../specs/YJ-16013-datasheet.pdf) (используемые пины)
 
 | Пин модуля | GPIO nRF52832 | Функция |
 |---|---|---|
@@ -49,6 +49,8 @@ GND      ──────────► TP_GND
 - `D1 (BAT54)` — полярность: анод к батарее `+`, катод к `CBUF`;
 - `CBUF` максимально близко к `+` батарейного вывода (после диода);
 - `MCP1700` вход и выход с конденсаторами `1 µF` вплотную к корпусу LDO;
-- `100 нФ` вплотную к `VCC` пину [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832);
-- антенна [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) направлена к пластиковой стенке корпуса, зазор ≥ 10 мм;
+- `100 нФ` вплотную к `VCC` пину [YJ-16013](../specs/YJ-16013-datasheet.pdf);
+- антенна [YJ-16013](../specs/YJ-16013-datasheet.pdf) направлена к пластиковой стенке корпуса, зазор ≥ 10 мм;
 - тест-точки `SWD + RESET` доступны для pogo-pin jig до заливки компаундом.
+
+

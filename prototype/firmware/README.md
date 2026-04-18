@@ -244,7 +244,7 @@ CONFIG_LOG_BACKEND_USB_CDC=y
 ## Важно: APPROTECT
 
 В прототипе **НЕ включать** `TAG_ENABLE_APPROTECT=1` — иначе нельзя будет перепрошить.  
-В производственной версии ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832)) APPROTECT включается перед финальной прошивкой.
+В производственной версии ([YJ-16013](../../specs/YJ-16013-datasheet.pdf)) APPROTECT включается перед финальной прошивкой.
 
 ---
 
@@ -264,3 +264,5 @@ cd server/
 python lookup.py --simulate --tag-id 1
 # Вывод: tag_id=1, slot=XXXXXX — метка идентифицирована
 ```
+
+

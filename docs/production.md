@@ -1,11 +1,11 @@
 ﻿# Производственная схема
 
-Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)**.
+Платформа: **[YJ-16013](../specs/YJ-16013-datasheet.pdf) (nRF52832)**.
 
 ## Целевой маршрут
 
-1. Закупить модули [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) одной партии.
-2. Собрать плату: [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) + `MCP1700` + `BAT54` + обвязка + тест-поинты `SWD/RESET`.
+1. Закупить модули [YJ-16013](../specs/YJ-16013-datasheet.pdf) одной партии.
+2. Собрать плату: [YJ-16013](../specs/YJ-16013-datasheet.pdf) + `MCP1700` + `BAT54` + обвязка + тест-поинты `SWD/RESET`.
 3. Прошить `nRF52832` через `SWD` (J-LINK / nRF52 DK): `SoftDevice S112` + приложение с `TAG_ID`, `KEY`, `unix_time`.
 4. Активировать `APPROTECT` (включено в финальной прошивке).
 5. Проверить BLE-рекламу: `Major/Minor` меняются раз в `5 мин`, `MAC` меняется вместе.
@@ -83,7 +83,7 @@ west flash --runner nrfjprog
 - напряжение `VDD_3V0` в норме (`2.95...3.05 В`).
 
 **После сборки в корпус:**
-- антенна [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) ориентирована к пластику;
+- антенна [YJ-16013](../specs/YJ-16013-datasheet.pdf) ориентирована к пластику;
 - дальность не деградировала (сравнить до/после сборки);
 - компаунд не попал в RF-зону.
 
@@ -96,3 +96,5 @@ west flash --runner nrfjprog
 | `Major/Minor` не меняются | ошибка в `TAG_CYCLES_PER_SLOT` или `unix_time = 0` |
 | Сервер не идентифицирует метку | неверный `KEY` или `TAG_ID` не в реестре |
 | Нет рекламы после пайки батареи | батарея разряжена, неверная полярность `BAT54` |
+
+
