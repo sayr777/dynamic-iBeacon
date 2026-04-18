@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BLE Tag Lookup</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --surface2: #252836;
+      --border:   #2e3347;
+      --text:     #e2e8f0;
+      --muted:    #8892a4;
+      --accent:   #3b82f6;
+      --accent2:  #60a5fa;
+      --green:    #22c55e;
+      --green-bg: #14532d30;
+      --red:      #ef4444;
+      --yellow:   #f59e0b;
+      --mono:     'JetBrains Mono','Fira Code','Courier New',monospace;
+    }
+    html,body { height:100%; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:15px; line-height:1.5; }
+
+    /* ── Layout ── */
+    body { display:flex; flex-direction:column; align-items:center;
+      padding:0 0 60px; min-height:100%; }
+
+    header { width:100%; max-width:640px; text-align:center;
+      padding:24px 16px 0; }
+    header h1 { font-size:1.5rem; font-weight:700; color:var(--accent2); }
+    header p  { color:var(--muted); font-size:.85rem; margin-top:3px; }
+
+    /* ── Tabs ── */
+    .tabs { display:flex; width:100%; max-width:640px;
+      margin-top:18px; padding:0 16px; gap:8px; }
+    .tab { flex:1; padding:9px 0; border:1px solid var(--border);
+      border-radius:8px; background:var(--surface); color:var(--muted);
+      font-size:.875rem; font-weight:600; cursor:pointer;
+      transition:.15s; text-align:center; }
+    .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+    /* ── Panels ── */
+    .panel { display:none; width:100%; max-width:640px;
+      padding:16px 16px 0; flex-direction:column; gap:16px; }
+    .panel.active { display:flex; }
+
+    /* ── Card ── */
+    .card { background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; padding:18px; display:flex;
+      flex-direction:column; gap:14px; }
+    .card-title { font-size:.72rem; text-transform:uppercase;
+      letter-spacing:1px; color:var(--muted); font-weight:600; }
+
+    /* ── Fields ── */
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .field { flex:1 1 120px; display:flex; flex-direction:column; gap:5px; }
+    label { font-size:.78rem; color:var(--muted); font-weight:500; }
+    input, select {
+      background:var(--surface2); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-family:var(--mono);
+      font-size:.9rem; padding:8px 10px; outline:none;
+      transition:border-color .15s; width:100%; }
+    input:focus, select:focus { border-color:var(--accent); }
+    input.error { border-color:var(--red); }
+    .key-row { display:flex; gap:8px; align-items:center; }
+    .key-row input { flex:1; font-size:.78rem; letter-spacing:.5px; }
+    .btn-sm { padding:6px 12px; border:1px solid var(--border);
+      border-radius:6px; background:var(--surface2); color:var(--muted);
+      font-size:.75rem; cursor:pointer; white-space:nowrap;
+      transition:.15s; }
+    .btn-sm:hover { border-color:var(--accent); color:var(--accent2); }
+
+    /* ── Primary button ── */
+    .btn-primary { width:100%; padding:11px; background:var(--accent);
+      color:#fff; border:none; border-radius:8px; font-size:.95rem;
+      font-weight:600; cursor:pointer; transition:.15s; }
+    .btn-primary:hover  { background:var(--accent2); }
+    .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-primary.stop { background:#7f1d1d; }
+    .btn-primary.stop:hover { background:var(--red); }
+
+    /* ── Progress ── */
+    .progress-wrap { display:none; flex-direction:column; gap:5px; }
+    .progress-wrap.active { display:flex; }
+    .progress-bg { height:5px; background:var(--surface2);
+      border-radius:3px; overflow:hidden; }
+    .progress-fill { height:100%; background:var(--accent);
+      border-radius:3px; transition:width .3s ease; width:0%; }
+    .progress-txt { font-size:.75rem; color:var(--muted); font-family:var(--mono); }
+
+    /* ── Lookup result ── */
+    .result { display:none; border-radius:10px; overflow:hidden;
+      border:1px solid var(--border); }
+    .result.visible { display:block; }
+    .result.found   { border-color:var(--green); }
+    .result.notfound{ border-color:var(--red); }
+    .result-head { padding:10px 14px; font-weight:600; font-size:.9rem;
+      display:flex; align-items:center; gap:8px; }
+    .result.found    .result-head { background:var(--green-bg); color:var(--green); }
+    .result.notfound .result-head { background:#7f1d1d20; color:var(--red); }
+    .result-grid { background:var(--surface2); padding:12px 14px;
+      display:grid; grid-template-columns:100px 1fr; gap:7px 10px;
+      font-family:var(--mono); font-size:.88rem; }
+    .rk { color:var(--muted); }
+    .rv { color:var(--text); font-weight:600; }
+    .rv.big { font-size:1.6rem; color:var(--accent2); line-height:1.2; }
+
+    /* ── Details collapsible ── */
+    details { border:1px solid var(--border); border-radius:8px; }
+    summary { padding:9px 13px; cursor:pointer; font-size:.78rem;
+      color:var(--muted); background:var(--surface2); user-select:none;
+      list-style:none; display:flex; justify-content:space-between; }
+    summary::after { content:'▸'; transition:transform .2s; }
+    details[open] summary::after { transform:rotate(90deg); }
+    details .inner { padding:13px; display:flex; flex-direction:column; gap:11px; }
+
+    /* ── Scanner ── */
+    .scanner-status { display:flex; align-items:center; gap:10px;
+      padding:10px 14px; background:var(--surface2);
+      border-radius:8px; font-size:.85rem; }
+    .dot { width:9px; height:9px; border-radius:50%;
+      background:var(--muted); flex-shrink:0; }
+    .dot.scanning { background:var(--green);
+      animation:pulse 1.4s ease-in-out infinite; }
+    .dot.error { background:var(--red); }
+    @keyframes pulse {
+      0%,100%{ opacity:1; transform:scale(1); }
+      50%     { opacity:.5; transform:scale(.8); }
+    }
+
+    .scanner-list { display:flex; flex-direction:column; gap:8px;
+      min-height:60px; }
+    .device-card { background:var(--surface2); border:1px solid var(--border);
+      border-radius:10px; padding:12px 14px;
+      display:grid; grid-template-columns:1fr auto;
+      gap:4px 12px; transition:border-color .3s, background .3s; }
+    .device-card.ours { border-color:var(--green);
+      background:var(--green-bg); }
+    .device-card.fading { opacity:.5; }
+    .dev-name  { font-weight:600; font-size:.9rem;
+      display:flex; align-items:center; gap:6px; }
+    .dev-mac   { font-family:var(--mono); font-size:.78rem; color:var(--muted); }
+    .dev-rssi  { grid-column:2; grid-row:1/3; display:flex;
+      align-items:center; justify-content:flex-end; }
+    .rssi-bar  { display:flex; gap:2px; align-items:flex-end; }
+    .rssi-bar span { width:5px; background:var(--border); border-radius:2px; }
+    .rssi-bar span.on { background:var(--accent2); }
+    .rssi-bar span:nth-child(1){ height:6px; }
+    .rssi-bar span:nth-child(2){ height:10px; }
+    .rssi-bar span:nth-child(3){ height:14px; }
+    .rssi-bar span:nth-child(4){ height:18px; }
+    .dev-detail { font-size:.78rem; color:var(--muted);
+      font-family:var(--mono); display:flex; gap:10px; flex-wrap:wrap; }
+    .tag-id-badge { display:inline-flex; align-items:center;
+      gap:4px; font-size:.8rem; font-weight:700;
+      color:var(--green); background:#14532d40;
+      border:1px solid var(--green); border-radius:6px;
+      padding:1px 8px; font-family:var(--mono); }
+    .tag-id-badge.loading { color:var(--yellow);
+      border-color:var(--yellow); background:#78350f30;
+      animation:blink .8s ease-in-out infinite; }
+    @keyframes blink { 50%{ opacity:.4; } }
+
+    .empty-hint { color:var(--muted); font-size:.85rem;
+      text-align:center; padding:20px 0; }
+
+    .uuid-field input { font-size:.72rem; letter-spacing:.3px; }
+
+    /* ── Misc ── */
+    hr  { border:none; border-top:1px solid var(--border); }
+    .hint { font-size:.75rem; color:var(--muted); }
+    pre { font-family:var(--mono); font-size:.76rem;
+      color:var(--muted); overflow-x:auto; white-space:pre; }
+    footer { color:var(--muted); font-size:.73rem; text-align:center;
+      margin-top:10px; padding-bottom:8px; }
+    footer a { color:var(--accent2); text-decoration:none; }
+    .warn { color:var(--yellow); font-size:.8rem; }
+
+    @media(max-width:400px) {
+      header h1 { font-size:1.25rem; }
+      .result-grid { font-size:.82rem; grid-template-columns:80px 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📡 BLE Tag Lookup</h1>
+  <p>Идентификация динамических iBeacon-меток · AES-128</p>
+</header>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('lookup')">🔍 Lookup</div>
+  <div class="tab"        onclick="switchTab('scanner')">📶 Scanner</div>
+</div>
+
+<!-- ══════════════════════════════════════
+     ВКЛАДКА: LOOKUP
+══════════════════════════════════════ -->
+<div class="panel active" id="panel-lookup">
+
+  <div class="card">
+    <div class="card-title">Входные данные iBeacon</div>
+
+    <div class="row">
+      <div class="field">
+        <label>Major (hex)</label>
+        <input id="l-major" placeholder="4B10" maxlength="4"
+          autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Minor (hex)</label>
+        <input id="l-minor" placeholder="545F" maxlength="4"
+          autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>AES-128 KEY</label>
+      <div class="key-row">
+        <input id="l-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
+          maxlength="32" autocomplete="off" spellcheck="false">
+        <button class="btn-sm" onclick="resetKey('l-key')">тест</button>
+      </div>
+    </div>
+
+    <details>
+      <summary>Параметры поиска&emsp;<span id="l-ops-badge"
+        style="font-family:var(--mono);color:var(--accent2)"></span></summary>
+      <div class="inner">
+        <div class="row">
+          <div class="field">
+            <label>Режим</label>
+            <select id="l-mode" onchange="onLookupModeChange()">
+              <option value="proto">Прототип (uptime / 10s)</option>
+              <option value="prod">Production (unix / 300s)</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" id="l-slot-row">
+          <div class="field"><label>Слоты от</label>
+            <input id="l-smin" type="number" value="0" min="0"></div>
+          <div class="field"><label>Слоты до</label>
+            <input id="l-smax" type="number" value="500" min="1"></div>
+        </div>
+        <div id="l-prod-hint" class="hint" style="display:none">
+          Текущий слот: <span id="l-cur-slot"
+            style="font-family:var(--mono);color:var(--accent2)">—</span>
+          · поиск ±5 от текущего
+        </div>
+        <div class="row">
+          <div class="field"><label>TagID от</label>
+            <input id="l-tmin" type="number" value="0" min="0" max="65535"></div>
+          <div class="field"><label>TagID до</label>
+            <input id="l-tmax" type="number" value="100" min="1" max="65535"></div>
+        </div>
+        <p class="hint">Операций: <b id="l-ops">—</b> · ~<b id="l-time">—</b></p>
+      </div>
+    </details>
+
+    <button class="btn-primary" id="l-btn" onclick="startLookup()">
+      🔍 Найти TagID
+    </button>
+
+    <div class="progress-wrap" id="l-progress">
+      <div class="progress-bg"><div class="progress-fill" id="l-bar"></div></div>
+      <div class="progress-txt" id="l-ptxt">Поиск…</div>
+    </div>
+
+    <div class="result" id="l-result">
+      <div class="result-head" id="l-rhead"></div>
+      <div class="result-grid" id="l-rbody"></div>
+    </div>
+  </div>
+
+  <!-- Справка -->
+  <div class="card">
+    <div class="card-title">Как пользоваться</div>
+    <div style="display:flex;flex-direction:column;gap:7px;
+      font-size:.85rem;color:var(--muted)">
+      <p>1. Откройте <b style="color:var(--text)">nRF Connect</b> на смартфоне →
+        Scan → найдите устройство с нужным UUID</p>
+      <p>2. Скопируйте <b style="color:var(--text)">Major</b> и
+        <b style="color:var(--text)">Minor</b> из Manufacturer Data</p>
+      <p>3. Или возьмите из serial-лога:
+        <code style="background:var(--surface2);padding:1px 5px;
+          border-radius:4px;font-size:.76rem">Major=0x4B10 Minor=0x545F</code></p>
+      <hr>
+      <p class="warn">⚠️ KEY должен совпадать с ключом в прошивке метки</p>
+    </div>
+  </div>
+
+  <!-- Алгоритм -->
+  <div class="card">
+    <div class="card-title">Алгоритм</div>
+    <pre>для TagID в [tMin..tMax]:
+  для Slot в [sMin..sMax]:
+    block = TagID[2] ‖ Slot[4] ‖ 0x00[10]
+    out   = AES-128-ECB(KEY, block)
+    если out[0:2]==Major И out[2:4]==Minor:
+      TagID найден!
+      MAC = out[4]|0xC0 ‖ out[5:10]</pre>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     ВКЛАДКА: SCANNER
+══════════════════════════════════════ -->
+<div class="panel" id="panel-scanner">
+
+  <div class="card">
+    <div class="card-title">Настройки сканера</div>
+
+    <div class="field uuid-field">
+      <label>UUID наших меток</label>
+      <input id="s-uuid" value="E2C56DB5-DFFB-48D2-B060-D0F5A71096E0"
+        autocomplete="off" spellcheck="false" placeholder="UUID (32 hex без дефисов или со)">
+    </div>
+
+    <div class="field">
+      <label>AES-128 KEY</label>
+      <div class="key-row">
+        <input id="s-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
+          maxlength="32" autocomplete="off" spellcheck="false">
+        <button class="btn-sm" onclick="resetKey('s-key')">тест</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>TagID до</label>
+        <input id="s-tmax" type="number" value="100" min="1" max="65535">
+      </div>
+      <div class="field">
+        <label>Слоты ±</label>
+        <input id="s-srange" type="number" value="5" min="1" max="50">
+      </div>
+    </div>
+
+    <button class="btn-primary" id="s-btn" onclick="toggleScan()">
+      📶 Начать сканирование
+    </button>
+
+    <div class="scanner-status" id="s-status">
+      <div class="dot" id="s-dot"></div>
+      <span id="s-status-txt">Нажмите «Начать сканирование»</span>
+    </div>
+  </div>
+
+  <!-- Список устройств -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title">Устройства
+        <span id="s-count" style="color:var(--accent2);margin-left:6px">0</span>
+      </div>
+      <button class="btn-sm" onclick="clearDevices()">очистить</button>
+    </div>
+    <div class="scanner-list" id="s-list">
+      <div class="empty-hint" id="s-empty">
+        Устройств пока нет. Запустите сканирование.
+      </div>
+    </div>
+  </div>
+
+  <!-- Совместимость -->
+  <div class="card" id="s-compat-card" style="display:none">
+    <div class="card-title">⚠️ Ограничения браузера</div>
+    <div style="font-size:.83rem;color:var(--muted);
+      display:flex;flex-direction:column;gap:6px">
+      <p>BLE-сканирование поддерживается только в:</p>
+      <p>· <b style="color:var(--text)">Chrome на Android</b> (наилучшая поддержка)</p>
+      <p>· Chrome на Desktop (экспериментальный режим)</p>
+      <p>· <b style="color:var(--red)">iOS Safari — не поддерживается</b></p>
+      <p>На Desktop Chrome: включить флаг
+        <code style="background:var(--surface2);padding:1px 5px;
+          border-radius:4px;font-size:.73rem">chrome://flags/#enable-experimental-web-platform-features</code>
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Работает офлайн · AES через WebCrypto API ·
+  <a href="https://github.com/sayr777/dynamic-iBeacon" target="_blank">GitHub</a>
+</footer>
+
+<script>
+'use strict';
+// ══════════════════════════════════════════════════════
+// Service Worker
+// ══════════════════════════════════════════════════════
+if ('serviceWorker' in navigator)
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+// ══════════════════════════════════════════════════════
+// Вкладки
+// ══════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=>
+    t.classList.toggle('active', ['lookup','scanner'][i]===name));
+  document.querySelectorAll('.panel').forEach(p=>
+    p.classList.toggle('active', p.id==='panel-'+name));
+}
+
+// ══════════════════════════════════════════════════════
+// AES-128 ECB через WebCrypto (CBC + zero IV)
+// ══════════════════════════════════════════════════════
+const _keyCache = new Map();
+async function getKey(hexStr) {
+  if (_keyCache.has(hexStr)) return _keyCache.get(hexStr);
+  const bytes = hexToU8(hexStr);
+  const k = await crypto.subtle.importKey('raw', bytes,
+    {name:'AES-CBC'}, false, ['encrypt']);
+  _keyCache.set(hexStr, k);
+  return k;
+}
+
+async function aesECB(cryptoKey, block16) {
+  const iv  = new Uint8Array(16);
+  const out = await crypto.subtle.encrypt({name:'AES-CBC',iv}, cryptoKey, block16);
+  return new Uint8Array(out, 0, 16);
+}
+
+function buildBlock(tagID, slot) {
+  const b = new Uint8Array(16);
+  b[0]=(tagID>>8)&0xFF; b[1]=tagID&0xFF;
+  b[2]=(slot>>24)&0xFF; b[3]=(slot>>16)&0xFF;
+  b[4]=(slot>> 8)&0xFF; b[5]= slot     &0xFF;
+  return b;
+}
+
+function deriveMAC(out) {
+  return [(out[4]|0xC0),out[5],out[6],out[7],out[8],out[9]]
+    .map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(':');
+}
+
+// ══════════════════════════════════════════════════════
+// Lookup Worker
+// ══════════════════════════════════════════════════════
+let lWorker = null;
+
+function resetKey(id) {
+  document.getElementById(id).value = '2B7E151628AED2A6ABF7158809CF4F3C';
+  updateOps();
+}
+
+function hexToU8(hex) {
+  return new Uint8Array(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
+}
+
+function getSlotRange() {
+  const mode = document.getElementById('l-mode').value;
+  if (mode==='prod') {
+    const c = Math.floor(Date.now()/1000/300);
+    return {min:Math.max(0,c-5), max:c+5};
+  }
+  return {
+    min: parseInt(document.getElementById('l-smin').value)||0,
+    max: parseInt(document.getElementById('l-smax').value)||500
+  };
+}
+
+function onLookupModeChange() {
+  const prod = document.getElementById('l-mode').value==='prod';
+  document.getElementById('l-slot-row').style.display = prod?'none':'';
+  document.getElementById('l-prod-hint').style.display = prod?'block':'none';
+  if (prod) document.getElementById('l-cur-slot').textContent =
+    Math.floor(Date.now()/1000/300);
+  updateOps();
+}
+
+function updateOps() {
+  const tMin=parseInt(document.getElementById('l-tmin').value)||0;
+  const tMax=parseInt(document.getElementById('l-tmax').value)||100;
+  const {min:sMin,max:sMax}=getSlotRange();
+  const ops=(tMax-tMin+1)*(sMax-sMin+1);
+  document.getElementById('l-ops').textContent=ops.toLocaleString('ru');
+  const ms=ops/500000*1000;
+  document.getElementById('l-time').textContent=
+    ms<100?'< 0.1 с':ms<1000?(ms/1000).toFixed(1)+' с':(ms/1000).toFixed(0)+' с';
+  document.getElementById('l-ops-badge').textContent='~'+
+    (ops>1e6?(ops/1e6).toFixed(1)+'M':ops>1e3?(ops/1e3).toFixed(0)+'K':ops)+' ops';
+}
+
+['l-tmin','l-tmax','l-smin','l-smax'].forEach(id=>
+  document.getElementById(id).addEventListener('input',updateOps));
+['l-major','l-minor'].forEach(id=>
+  document.getElementById(id).addEventListener('input',e=>{
+    e.target.value=e.target.value.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
+  }));
+document.getElementById('l-key').addEventListener('input',e=>{
+  e.target.value=e.target.value.replace(/[^0-9a-fA-F]/g,'').toUpperCase();
+  _keyCache.clear(); updateOps();
+});
+
+function startLookup() {
+  const majorStr=document.getElementById('l-major').value.trim();
+  const minorStr=document.getElementById('l-minor').value.trim();
+  const keyStr  =document.getElementById('l-key').value.trim();
+  let ok=true;
+  const chk=(id,re)=>{
+    const el=document.getElementById(id);
+    if(!re.test(el.value.trim())){el.classList.add('error');ok=false;}
+    else el.classList.remove('error');
+  };
+  chk('l-major',/^[0-9a-fA-F]{1,4}$/);
+  chk('l-minor',/^[0-9a-fA-F]{1,4}$/);
+  chk('l-key',  /^[0-9a-fA-F]{32}$/);
+  if(!ok) return;
+
+  const major=parseInt(majorStr,16), minor=parseInt(minorStr,16);
+  const tMin=parseInt(document.getElementById('l-tmin').value)||0;
+  const tMax=parseInt(document.getElementById('l-tmax').value)||100;
+  const {min:sMin,max:sMax}=getSlotRange();
+
+  document.getElementById('l-btn').disabled=true;
+  document.getElementById('l-btn').textContent='⏳ Идёт поиск…';
+  document.getElementById('l-progress').classList.add('active');
+  document.getElementById('l-result').classList.remove('visible','found','notfound');
+  setLBar(0,`Поиск TagID ${tMin}..${tMax}, слоты ${sMin}..${sMax}…`);
+
+  if(lWorker) lWorker.terminate();
+  lWorker = new Worker('./worker.js');
+  const t0=performance.now();
+
+  lWorker.onmessage=({data})=>{
+    if(data.type==='progress'){
+      setLBar(data.total?data.checked/data.total*100:0,
+        `${data.checked.toLocaleString('ru')} / ${data.total.toLocaleString('ru')}`);
+    } else if(data.type==='found'){
+      showLFound(data, (performance.now()-t0).toFixed(0));
+      lDone();
+    } else if(data.type==='notfound'){
+      showLNotFound(data.checked,(performance.now()-t0).toFixed(0));
+      lDone();
+    } else if(data.type==='error'){
+      showLError(data.message); lDone();
+    }
+  };
+  lWorker.onerror=e=>{showLError(e.message);lDone();};
+  lWorker.postMessage({keyHex:keyStr,major,minor,tagMin:tMin,tagMax:tMax,slotMin:sMin,slotMax:sMax});
+}
+
+function lDone(){
+  document.getElementById('l-btn').disabled=false;
+  document.getElementById('l-btn').textContent='🔍 Найти TagID';
+  document.getElementById('l-progress').classList.remove('active');
+  if(lWorker){lWorker.terminate();lWorker=null;}
+}
+function setLBar(pct,txt){
+  document.getElementById('l-bar').style.width=pct+'%';
+  document.getElementById('l-ptxt').textContent=txt;
+}
+function showLFound(d,ms){
+  const el=document.getElementById('l-result');
+  el.className='result visible found';
+  document.getElementById('l-rhead').innerHTML='✅ Метка найдена';
+  document.getElementById('l-rbody').innerHTML=`
+    <div class="rk">TagID</div><div class="rv big">${d.tagID}</div>
+    <div class="rk">Slot</div><div class="rv">${d.slot}</div>
+    <div class="rk">MAC</div><div class="rv">${d.mac}</div>
+    <div class="rk">Проверено</div><div class="rv">${d.checked.toLocaleString('ru')}</div>
+    <div class="rk">Время</div><div class="rv">${ms} мс</div>`;
+}
+function showLNotFound(checked,ms){
+  const el=document.getElementById('l-result');
+  el.className='result visible notfound';
+  document.getElementById('l-rhead').innerHTML='❌ Не найдено';
+  document.getElementById('l-rbody').innerHTML=`
+    <div class="rk">Проверено</div><div class="rv">${checked.toLocaleString('ru')}</div>
+    <div class="rk">Время</div><div class="rv">${ms} мс</div>
+    <div class="rk" style="grid-column:1/-1;color:var(--yellow)">
+      Расширьте диапазон TagID или слотов</div>`;
+}
+function showLError(msg){
+  const el=document.getElementById('l-result');
+  el.className='result visible notfound';
+  document.getElementById('l-rhead').innerHTML='⚠️ Ошибка';
+  document.getElementById('l-rbody').innerHTML=
+    `<div class="rk" style="grid-column:1/-1">${msg}</div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// Scanner
+// ══════════════════════════════════════════════════════
+let scanning=false, bleScan=null;
+const devices = new Map(); // mac → {name,rssi,major,minor,tagID,ts}
+let scanTimer=null;
+
+function toggleScan() {
+  if(scanning) stopScan(); else startScan();
+}
+
+async function startScan() {
+  if(!navigator.bluetooth || !navigator.bluetooth.requestLEScan) {
+    document.getElementById('s-compat-card').style.display='';
+    setScanStatus('error','Web Bluetooth Scan не поддерживается в этом браузере');
+    return;
+  }
+  try {
+    setScanStatus('scanning','Запрос разрешения…');
+    bleScan = await navigator.bluetooth.requestLEScan({
+      acceptAllAdvertisements: true,
+      keepRepeatedDevices: true
+    });
+    scanning=true;
+    document.getElementById('s-btn').textContent='⏹ Остановить';
+    document.getElementById('s-btn').classList.add('stop');
+    setScanStatus('scanning','Сканирование…');
+    navigator.bluetooth.addEventListener('advertisementreceived', onAdv);
+    scanTimer=setInterval(updateDeviceList,1000);
+  } catch(e) {
+    document.getElementById('s-compat-card').style.display='';
+    setScanStatus('error','Ошибка: '+e.message);
+  }
+}
+
+function stopScan() {
+  if(bleScan) { try{bleScan.stop();}catch(e){} bleScan=null; }
+  navigator.bluetooth.removeEventListener('advertisementreceived', onAdv);
+  clearInterval(scanTimer);
+  scanning=false;
+  document.getElementById('s-btn').textContent='📶 Начать сканирование';
+  document.getElementById('s-btn').classList.remove('stop');
+  setScanStatus('','Сканирование остановлено');
+}
+
+function setScanStatus(state,text) {
+  const dot=document.getElementById('s-dot');
+  dot.className='dot'+(state?' '+state:'');
+  document.getElementById('s-status-txt').textContent=text;
+}
+
+// Парсинг iBeacon из manufacturer data Apple (0x004C)
+function parseIBeacon(mfrData) {
+  if(!mfrData || !mfrData.has(0x004C)) return null;
+  const d=new Uint8Array(mfrData.get(0x004C).buffer);
+  // iBeacon: 02 15 UUID[16] Major[2] Minor[2] TxPower[1]
+  if(d.length<23 || d[0]!==0x02 || d[1]!==0x15) return null;
+  const uuid=[...d.slice(2,18)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const major=(d[18]<<8)|d[19];
+  const minor=(d[20]<<8)|d[21];
+  return {uuid, major, minor};
+}
+
+function targetUUID() {
+  return document.getElementById('s-uuid').value
+    .replace(/-/g,'').toUpperCase();
+}
+
+async function onAdv(event) {
+  const mac  = event.device.id; // в браузере это внутренний ID, не MAC
+  const name = event.name || event.device.name || '';
+  const rssi = event.rssi;
+  const ib   = parseIBeacon(event.manufacturerData);
+
+  // Определяем ключ устройства: если iBeacon — по uuid+major+minor,
+  // иначе по device.id
+  const key = ib ? `ib:${ib.uuid}:${ib.major}:${ib.minor}` : `dev:${mac}`;
+
+  const existing = devices.get(key) || {};
+  const entry = {
+    ...existing,
+    name, rssi,
+    major: ib?.major, minor: ib?.minor,
+    uuid:  ib?.uuid,
+    ours:  ib ? ib.uuid===targetUUID() : false,
+    ts: Date.now()
+  };
+
+  // Если это наша метка и tagID ещё не определён — запустить поиск
+  if(entry.ours && entry.tagID===undefined && !entry.searching) {
+    entry.searching=true;
+    devices.set(key,entry);
+    lookupTag(key, ib.major, ib.minor);
+  } else {
+    devices.set(key,entry);
+  }
+  renderDevices();
+}
+
+async function lookupTag(key, major, minor) {
+  const keyStr = document.getElementById('s-key').value.trim();
+  if(!/^[0-9a-fA-F]{32}$/.test(keyStr)) return;
+
+  const tMax   = parseInt(document.getElementById('s-tmax').value)||100;
+  const sRange = parseInt(document.getElementById('s-srange').value)||5;
+  const curSlot= Math.floor(Date.now()/1000/300);
+  const sMin   = Math.max(0, curSlot-sRange);
+  const sMax   = curSlot+sRange;
+
+  try {
+    const cryptoKey = await getKey(keyStr);
+    for(let tagID=0; tagID<=tMax; tagID++) {
+      for(let slot=sMin; slot<=sMax; slot++) {
+        const out = await aesECB(cryptoKey, buildBlock(tagID, slot));
+        const m=(out[0]<<8)|out[1], n=(out[2]<<8)|out[3];
+        if(m===major && n===minor) {
+          const mac=deriveMAC(out);
+          const d=devices.get(key);
+          if(d){ d.tagID=tagID; d.slot=slot; d.mac=mac; d.searching=false; }
+          renderDevices();
+          return;
+        }
+      }
+      // Уступить поток каждые 50 tagID
+      if(tagID%50===49) await new Promise(r=>setTimeout(r,0));
+    }
+    const d=devices.get(key);
+    if(d){ d.tagID=null; d.searching=false; }
+    renderDevices();
+  } catch(e) {
+    const d=devices.get(key);
+    if(d){ d.tagID=null; d.searching=false; }
+    renderDevices();
+  }
+}
+
+function rssiToLevel(rssi) {
+  if(rssi>=−55) return 4;
+  if(rssi>=−70) return 3;
+  if(rssi>=−85) return 2;
+  return 1;
+}
+
+function rssiBar(rssi) {
+  const lvl=rssiToLevel(rssi);
+  return `<div class="rssi-bar">${[1,2,3,4].map(i=>
+    `<span class="${i<=lvl?'on':''}"></span>`).join('')}</div>`;
+}
+
+function renderDevices() {
+  const list=document.getElementById('s-list');
+  const empty=document.getElementById('s-empty');
+  const count=document.getElementById('s-count');
+
+  if(devices.size===0){
+    list.innerHTML=''; list.appendChild(empty); count.textContent='0'; return;
+  }
+  empty.remove();
+  count.textContent=devices.size;
+
+  // Сортировка: сначала наши, потом по RSSI
+  const sorted=[...devices.entries()].sort(([,a],[,b])=>{
+    if(a.ours&&!b.ours) return -1;
+    if(!a.ours&&b.ours) return 1;
+    return (b.rssi||−100)-(a.rssi||−100);
+  });
+
+  // Обновить или создать карточки
+  const keys=new Set(sorted.map(([k])=>k));
+  // Удалить старые
+  list.querySelectorAll('.device-card').forEach(el=>{
+    if(!keys.has(el.dataset.key)) el.remove();
+  });
+
+  sorted.forEach(([key,d])=>{
+    const age=Date.now()-d.ts;
+    const fading=age>8000;
+    let card=list.querySelector(`.device-card[data-key="${CSS.escape(key)}"]`);
+    const isNew=!card;
+    if(isNew){ card=document.createElement('div'); card.dataset.key=key; }
+
+    card.className='device-card'+(d.ours?' ours':'')+(fading?' fading':'');
+
+    let tagBadge='';
+    if(d.ours) {
+      if(d.searching)
+        tagBadge=`<span class="tag-id-badge loading">⏳ ID…</span>`;
+      else if(d.tagID!==null&&d.tagID!==undefined)
+        tagBadge=`<span class="tag-id-badge">TagID ${d.tagID}</span>`;
+      else if(d.tagID===null)
+        tagBadge=`<span class="tag-id-badge" style="color:var(--red);border-color:var(--red)">?</span>`;
+    }
+
+    const majorH=d.major!=null?d.major.toString(16).padStart(4,'0').toUpperCase():'—';
+    const minorH=d.minor!=null?d.minor.toString(16).padStart(4,'0').toUpperCase():'—';
+
+    card.innerHTML=`
+      <div class="dev-name">
+        ${d.ours?'🟢':'⚪'} ${d.name||'(no name)'}
+        ${tagBadge}
+      </div>
+      <div class="dev-rssi">${rssiBar(d.rssi||−100)}</div>
+      <div class="dev-detail">
+        ${d.rssi!=null?`<span>RSSI ${d.rssi} dBm</span>`:''}
+        ${d.major!=null?`<span>M:${majorH} m:${minorH}</span>`:''}
+        ${d.mac?`<span>${d.mac}</span>`:''}
+        ${d.slot!=null?`<span>slot ${d.slot}</span>`:''}
+      </div>`;
+
+    if(isNew) list.prepend(card);
+  });
+}
+
+function clearDevices(){
+  devices.clear(); renderDevices();
+}
+
+// ══════════════════════════════════════════════════════
+// Периодические таймеры и инит
+// ══════════════════════════════════════════════════════
+function updateDeviceList() { renderDevices(); }
+setInterval(()=>{ // Обновлять таймер prod-слота
+  if(document.getElementById('l-mode').value==='prod')
+    document.getElementById('l-cur-slot').textContent=
+      Math.floor(Date.now()/1000/300);
+},10000);
+
+updateOps();
+</script>
+</body>
+</html>

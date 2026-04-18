@@ -37,3 +37,4 @@ firmware/src/tag_config.h
 # Temp
 *.tmp
 *.bak
+prototype/firmware/tinygo/firmware.uf2
