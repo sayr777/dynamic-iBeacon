@@ -1,13 +1,13 @@
-# Настройка nRF5 SDK 17.1.x + SoftDevice S112 и прошивка YJ-16013 (nRF52832) через SWD
+﻿# Настройка nRF5 SDK 17.1.x + SoftDevice S112 и прошивка [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832) через SWD
 
 ## Назначение
 
-Этот документ описывает практическую схему работы с прошивкой для `YJ-16013` на базе `nRF52832`:
+Этот документ описывает практическую схему работы с прошивкой для [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) на базе `nRF52832`:
 
 - установка окружения для `nRF5 SDK 17.1.x`;
 - подготовка `SoftDevice S112`;
 - подключение SWD-программатора к плате;
-- заливка `SoftDevice` и приложения на модуль `YJ-16013`;
+- заливка `SoftDevice` и приложения на модуль [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832);
 - базовая диагностика типовых проблем.
 
 Документ ориентирован в первую очередь на `Windows`, потому что это самый типичный сценарий для `nRF5 SDK + nrfjprog`.
@@ -29,7 +29,7 @@
 - `nRF52 DK`, используемая как внешний J-Link-программатор через `Debug Out`;
 - другой Nordic DK с J-Link OB.
 
-### SWD-сигналы для YJ-16013
+### SWD-сигналы для [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832)
 
 Для прошивки и отладки на плате должны быть доступны как минимум:
 
@@ -41,7 +41,7 @@
 
 ### Подключение программатора
 
-| Программатор | Плата YJ-16013 |
+| Программатор | Плата [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) |
 |---|---|
 | `SWDIO` | `SWDIO` |
 | `SWDCLK` | `SWDCLK` |
@@ -284,7 +284,7 @@ nrfjprog -f nrf52 --recover
 - приложение
 - все пользовательские данные, если они были
 
-## Порядок прошивки на YJ-16013
+## Порядок прошивки на [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832)
 
 ### Вариант 1. Прошивать SoftDevice и приложение отдельно
 
@@ -423,7 +423,7 @@ nrfjprog -f nrf52 --reset
 
 ## Рекомендация для этого проекта
 
-Для `YJ-16013 (nRF52832)` в рамках этого проекта наиболее практичный путь такой:
+Для [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) на `nRF52832` в рамках этого проекта наиболее практичный путь такой:
 
 - `nRF5 SDK 17.1.0`
 - `SoftDevice S112 v7.3.0`

@@ -1,24 +1,22 @@
-# Динамическая BLE-метка на nRF52832 (YJ-16013)
+﻿# Динамическая BLE-метка на nRF52832 ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))
 
 Автономная динамическая BLE-метка, которая меняет **UUID, Major, Minor, MAC и RadioMAC** каждые `5 мин`. При знании секретного ключа сервер **однозначно восстанавливает статичный идентификатор метки** по UUID + Major + Minor без хранения истории.
 
-## Выбранная платформа: nRF52832 (YJ-16013)
+## Выбранная платформа: nRF52832 ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))
 
 | Параметр | Значение |
 |---|---|
 | Чип | `nRF52832` (Nordic Semiconductor, ARM Cortex-M4F) |
-| Модуль | `YJ-16013` (512 KB Flash / 64 KB RAM) |
+| Модуль | [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (512 KB Flash / 64 KB RAM) |
 | SDK | `nRF5 SDK 17.1.x`, SoftDevice `S112` |
 | Средний ток | **~5.2 µА** |
 | Ресурс батареи `ER14505H` | **~15–20 лет** (ограничен саморазрядом) |
 | Запас по цели 3 года | **×5–6** |
-| Алгоритм | v2: 2×AES-128 ECB (variant=0 → UUID, variant=1 → Major+Minor+MAC) |
+| Алгоритм | 2×AES-128 ECB (variant=0 → UUID, variant=1 → Major+Minor+MAC) |
 | Динамические параметры | UUID, Major, Minor, MAC payload, RadioMAC — все 5 |
 | Смена параметров | ✅ гарантированно каждый слот |
 | Этапов прошивки | 1 (SWD через J-LINK / nRF52 DK) |
 | Полная стоимость изделия | **~$6.95** (батарея + корпус + все компоненты) |
-
-Сравнение с альтернативами: [`docs/platform-comparison.md`](docs/platform-comparison.md)
 
 ## Протокол работы
 
@@ -36,7 +34,7 @@
 Параметры iBeacon (UUID, Major, Minor) и MAC-адрес меняются синхронно каждые 5 мин.  
 Статичный `TAG_ID` метки недоступен из эфира — только через серверную идентификацию.
 
-## Алгоритм идентификации (v2)
+## Алгоритм идентификации
 
 Два вызова AES-128 ECB на каждый слот:
 
@@ -62,7 +60,6 @@ mac[0] |= 0xC0  # Random Static BLE address (биты 46-47 = 11)
 
 - [`docs/protocol.md`](docs/protocol.md) — **протокол работы**: FSM, sequence diagrams, iBeacon формат, ночной режим
 - [`docs/cost.md`](docs/cost.md) — **полная стоимость** изделия: каждый компонент, схема питания, $6.95/шт
-- [`docs/platform-comparison.md`](docs/platform-comparison.md) — сравнение nRF52832 vs nRF52810 vs JDY-23+CW32L010
 - [`docs/architecture.md`](docs/architecture.md) — архитектура изделия и режим работы
 - [`docs/algorithm.md`](docs/algorithm.md) — спецификация алгоритма смены параметров
 - [`docs/interaction-diagram.md`](docs/interaction-diagram.md) — диаграммы состояний и взаимодействия (Mermaid)
@@ -89,8 +86,7 @@ mac[0] |= 0xC0  # Random Static BLE address (биты 46-47 = 11)
 
 | Проект | Платформа | Назначение |
 |---|---|---|
-| [`ble-tag-jdy23`](../ble-tag-jdy23) | JDY-23 | Статичная метка, минимальная сложность |
 | [`ble-tag-e73`](../ble-tag-e73) | E73 / nRF52832 | Двунаправленная метка, протокол БНСО |
-| **ble-tag-jdy23-dynamic** | **YJ-16013 / nRF52832** | **Динамическая метка с AES-ротацией** |
+| **ble-tag-jdy23-dynamic** | **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) / nRF52832** | **Динамическая метка с AES-ротацией** |
 
 Прошивка данного проекта строится на платформе `ble-tag-e73`. Ключевое отличие: вместо приёма команд — периодическая смена `Major/Minor/MAC` по `AES-128`.

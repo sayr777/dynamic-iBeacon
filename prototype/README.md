@@ -1,4 +1,4 @@
-# Прототип на ProMicro NRF52840 (v1940)
+﻿# Прототип на ProMicro NRF52840 (v1940)
 
 Быстрый стенд для проверки алгоритма `AES-128 iBeacon-ротации`  
 без изготовления кастомной PCB и без J-Link программатора.
@@ -6,7 +6,7 @@
 ## Что это за плата
 
 `ProMicro NRF52840 v1940` — китайский клон [nice!nano v2.0](https://nicekeyboards.com/nice-nano/).  
-Продаётся на AliExpress как «SuperMini nRF52840» или «Pro Micro NRF52840».
+На AliExpress обычно ищется как [SuperMini nRF52840](https://www.aliexpress.com/w/wholesale-supermini-nrf52840.html) или [Pro Micro NRF52840](https://www.aliexpress.com/w/wholesale-pro-micro-nrf52840.html).
 
 | Параметр | Значение |
 |---|---|
@@ -24,7 +24,7 @@
 
 | Задача | Статус |
 |---|---|
-| Проверить алгоритм v2: AES-128 variant=0 → UUID, variant=1 → Major/Minor/MAC | ✅ реализовано и подтверждено |
+| Проверить алгоритм: AES-128 variant=0 → UUID, variant=1 → Major/Minor/MAC | ✅ реализовано и подтверждено |
 | UUID динамический (меняется каждый слот) | ✅ подтверждено на устройстве |
 | MAC payload (все 6 байт) динамический | ✅ подтверждено |
 | BLE Privacy — RadioMAC меняется каждый слот | ✅ `[privacy] OK` в логе |
@@ -43,46 +43,59 @@
 | **Только для SWD отладки:** | | | |
 | J-LINK v9 или nRF52840 DK | AliExpress / Nordic | $5–30 | SWD программирование (опционально) |
 
-Для базового теста достаточно платы + USB-C кабель + смартфон с приложением [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile).
+Для базового теста достаточно платы + USB-C кабель + смартфон с приложением [nRF Connect for Mobile](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile).
 
-## Быстрый старт (Zephyr, прошивка через USB)
+## Быстрый старт (TinyGo, прошивка через USB)
+
+Сейчас прототип работает на **TinyGo**, а не на Zephyr.
 
 ```bash
-# 1. Инициализировать Zephyr workspace (один раз)
-pip install west
-west init -m https://github.com/zephyrproject-rtos/zephyr zephyrproject
-cd zephyrproject && west update
-pip install -r zephyr/scripts/requirements.txt
+# 1. Установить TinyGo
+#    Windows installer:
+#    https://tinygo.org/getting-started/install/windows/
 
-# 2. Установить Zephyr SDK toolchain
-# https://docs.zephyrproject.org/latest/develop/getting_started/
+# 2. Перейти в каталог прошивки
+cd prototype/firmware/tinygo
 
-# 3. Собрать iBeacon sample (основа прототипа)
-west build -b promicro_nrf52840 samples/bluetooth/ibeacon
+# 3. Подтянуть зависимости
+go mod tidy
 
-# 4. Войти в режим UF2 (двойной клик RESET → GND на плате)
-#    Плата появится как USB-диск "NRF52BOOT"
+# 4. Собрать UF2 для ProMicro NRF52840 v1940
+tinygo build -o firmware.uf2 -target=nicenano .
+```
 
-# 5. Скопировать прошивку
-cp build/zephyr/zephyr.uf2 /media/NRF52BOOT/
-#    Плата перезагрузится и запустит прошивку
+Дальше прошивка заливается через UF2 bootloader:
 
-# Альтернатива — west flash через DFU:
-west flash --runner adafruit-nrfutil
+1. Подключить плату по USB.
+2. Дважды быстро замкнуть `RESET` на `GND`, чтобы войти в загрузчик.
+3. Плата появится как USB-диск `NICENANO` или `NRF52BOOT`.
+4. Скопировать `prototype/firmware/tinygo/firmware.uf2` на этот диск.
+5. Плата перезагрузится и запустит прошивку.
+
+Для просмотра логов:
+
+```bash
+tinygo monitor -port COM8
+# или любой serial terminal на 115200 baud
 ```
 
 ## Структура папки
 
 ```
 prototype/
-├── README.md                          — этот файл
+├── README.md                          — обзор прототипа
 ├── docs/
-│   ├── hardware.md                    — распиновка, схема подключения батареи
-│   └── differences.md                 — отличия от производственной метки
+│   ├── hardware.md                    — распиновка, батарея, плата
+│   ├── differences.md                 — отличия от производственной метки
+│   └── setup.md                       — подробная инструкция по прошивке и тестам
 └── firmware/
     ├── README.md                      — SDK, сборка, прошивка
-    └── src/
-        └── tag_platform_nrf52840_promicro.c  — платформенный слой
+    └── tinygo/
+        ├── main.go                    — основная TinyGo-прошивка
+        ├── privacy.go                 — BLE Privacy через SoftDevice
+        ├── go.mod / go.sum            — зависимости TinyGo
+        ├── softdevice_include/        — заголовки SoftDevice для CGo
+        └── firmware.uf2               — собранный UF2-образ
 ```
 
 ## Ожидаемое потребление прототипа
@@ -93,17 +106,24 @@ prototype/
 |---|---:|
 | `nRF52840` deep sleep + RTC | ~1.5 µА |
 | `LTH7R` LiPo зарядник (standby, без USB) | **~20 µА** |
-| LED (отключён в прошивке ночью) | 0 µА |
+| Статусный LED | ~0 µА в базовой оценке |
 | Утечки платы | ~1–2 µА |
 | **Итого прототип** | **~23–25 µА** |
-| **Итого производство (YJ-16013)** | **~5 µА** |
+| **Итого производство ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))** | **~5 µА** |
 
 Ток прототипа в ~5 раз выше из-за `LTH7R`. Для проверки алгоритма это не критично.  
 Реальный ресурс с LiPo 500 мАч: ~300 дней без зарядки.
 
 ## Ссылки
 
-- Zephyr board: https://docs.zephyrproject.org/latest/boards/others/promicro_nrf52840/doc/index.html
-- Все Zephyr samples: https://docs.zephyrproject.org/latest/samples/index.html
+- TinyGo install: https://tinygo.org/getting-started/install/
+- TinyGo nicenano board: https://tinygo.org/docs/reference/microcontrollers/nicenano/
+- AliExpress: [SuperMini nRF52840](https://www.aliexpress.com/w/wholesale-supermini-nrf52840.html)
+- AliExpress: [Pro Micro NRF52840](https://www.aliexpress.com/w/wholesale-pro-micro-nrf52840.html)
 - nice!nano документация: https://nicekeyboards.com/docs/nice-nano/
+- nRF Connect for Mobile: https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile
+- Google Play: https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp
+- App Store: https://apps.apple.com/us/app/nrf-connect-for-mobile/id1054362403
+- Подробная настройка и тесты: [`docs/setup.md`](docs/setup.md)
+- Прошивка прототипа: [`firmware/README.md`](firmware/README.md)
 - Производственная версия: [`../README.md`](../README.md)

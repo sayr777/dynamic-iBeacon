@@ -1,4 +1,4 @@
-# Архитектура изделия
+﻿# Архитектура изделия
 
 ## Назначение
 
@@ -6,15 +6,13 @@
 
 ## Выбранная платформа
 
-**`YJ-16013`** — программируемый BLE-модуль на `nRF52832` (Nordic Semiconductor).
+**[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832)** — программируемый BLE-модуль на `nRF52832` (Nordic Semiconductor).
 
-Один чип заменяет два (JDY-23 + MCU). Полный контроль над каждым рекламным пакетом: `Major`, `Minor`, `MAC`, интервал, TX power.
-
-Обоснование выбора: [`platform-comparison.md`](platform-comparison.md)
+Однокристальное решение даёт полный контроль над каждым рекламным пакетом: `Major`, `Minor`, `MAC`, интервал и `TX power`.
 
 ## Основные узлы
 
-- BLE-модуль `YJ-16013` (SoC `nRF52832`, 512 KB Flash / 64 KB RAM)
+- BLE-модуль [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (SoC `nRF52832`, 512 KB Flash / 64 KB RAM)
 - LDO `MCP1700T-3002E/TT` — `3.0 В`, `Iq ~1 µА`
 - диод Шотки `BAT54` — защита от переполюсовки
 - батарея `FANSO ER14505H-LD` с выводами под пайку
@@ -47,7 +45,7 @@ ER14505H-LD (+3.6 В)
     │
    [CBUF 100...220 µF]
     │
-   [MCP1700T-3002E/TT] → 3.0 В → E73 VCC
+   [MCP1700T-3002E/TT] → 3.0 В → YJ-16013 VCC
     │
    GND
 ```
@@ -80,26 +78,13 @@ ER14505H-LD (+3.6 В)
 
 Подробная спецификация: [`algorithm.md`](algorithm.md)
 
-## Сравнение с платформой JDY-23 + CW32L010
-
-Подробная таблица: [`platform-comparison.md`](platform-comparison.md)
-
-Краткий итог:
-
-| | JDY-23 + CW32L010 | **nRF52832 (YJ-16013)** |
-|---|:---:|:---:|
-| Средний ток | 22 µА | **5.2 µА** |
-| Чипов | 2 | **1** |
-| Смена MAC | ❓ | ✅ |
-| Этапов прошивки | 2 | **1** |
-
 ## Связь с ble-tag-e73
 
 Аппаратная часть близка к [`ble-tag-e73`](../../ble-tag-e73): тот же LDO, батарея, корпус. Прошивка отличается:
 
 | | `ble-tag-e73` | **ble-tag-jdy23-dynamic** |
 |---|---|---|
-| Модуль | E73 (nRF52832) | YJ-16013 (nRF52832) |
+| Модуль | E73 (nRF52832) | [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832) |
 | Режим BLE | Observer + Broadcaster | Только Broadcaster |
 | Параметры рекламы | фиксированные | AES-ротация каждый слот |
 | Протокол | двунаправленный БНСО | одностороннее beacon |
