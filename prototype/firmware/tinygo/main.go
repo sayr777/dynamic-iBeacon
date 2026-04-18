@@ -307,9 +307,18 @@ func must(action string, err error) {
 // ──────────────────────────────────────────────
 
 func main() {
-	// Инициализация LED
+	// Инициализация LED (P0.15, active HIGH)
 	led.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	led.Low() // выключен (active HIGH — LOW = off)
+	led.Low() // выключен
+
+	// P0.13 = управление VCC-шиной на nice!nano:
+	// HIGH отключает внешние 3.3V нагрузки (в т.ч. светодиоды на VCC).
+	// Если синий LED питается от VCC — погаснет.
+	// Если синий LED от LTH7R CHRG (аппаратный) — не поможет, нужна батарейка.
+	vccCtrl := machine.P0_13
+	vccCtrl.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	vccCtrl.Low() // LOW = VCC включён (оставляем включённым)
+	// ↑ Замените на vccCtrl.High() чтобы попробовать выключить синий LED
 
 	// Старт BLE стека
 	must("enable BLE", adapter.Enable())
