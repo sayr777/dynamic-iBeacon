@@ -485,15 +485,38 @@ for s in [slot_now-1, slot_now, slot_now+1]:
     </div>
   </div>
 
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title">⚙️ Как включить BLE-сканирование</div>
+      <button class="btn-sm" id="ble-help-toggle" onclick="toggleBleHelp()">развернуть</button>
+    </div>
+    <div id="ble-help-body" style="display:none;margin-top:10px">
+      <div style="font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:10px">
+        <div>
+          <p style="color:var(--text);font-weight:700;margin-bottom:4px">📱 Android Chrome</p>
+          <p>1. Открой в Chrome:</p>
+          <p style="margin:4px 0"><code>chrome://flags/#enable-experimental-web-platform-features</code></p>
+          <p>2. Найди <b style="color:var(--text)">«Experimental Web Platform features»</b></p>
+          <p>3. Выбери <b style="color:var(--green)">Enabled</b> → нажми <b style="color:var(--text)">Relaunch</b></p>
+        </div>
+        <hr>
+        <div>
+          <p style="color:var(--text);font-weight:700;margin-bottom:4px">🖥️ Desktop Chrome (Windows/Mac)</p>
+          <p>Те же шаги — открой <code>chrome://flags</code> в обычном Chrome.</p>
+        </div>
+        <hr>
+        <div>
+          <p><b style="color:var(--red)">iOS Safari</b> — не поддерживается.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="card" id="s-compat-card" style="display:none">
     <div class="card-title">⚠️ Ограничения браузера</div>
     <div style="font-size:.83rem;color:var(--muted);display:flex;flex-direction:column;gap:6px">
-      <p>BLE-сканирование поддерживается только в:</p>
-      <p>· <b style="color:var(--text)">Chrome на Android</b> (наилучшая поддержка)</p>
-      <p>· Chrome на Desktop (экспериментальный режим)</p>
-      <p>· <b style="color:var(--red)">iOS Safari — не поддерживается</b></p>
-      <p>На Desktop Chrome включить флаг:
-        <code>chrome://flags/#enable-experimental-web-platform-features</code></p>
+      <p>Web Bluetooth Scan не поддерживается в этом браузере.</p>
+      <p>Разверните блок <b style="color:var(--text)">«Как включить BLE-сканирование»</b> выше.</p>
     </div>
   </div>
 
@@ -556,6 +579,14 @@ function toggleStops() {
 function toggleAlgo() {
   const body = document.getElementById('l-algo-body');
   const btn  = document.getElementById('algo-toggle');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  btn.textContent    = open ? 'развернуть' : 'свернуть';
+}
+
+function toggleBleHelp() {
+  const body = document.getElementById('ble-help-body');
+  const btn  = document.getElementById('ble-help-toggle');
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   btn.textContent    = open ? 'развернуть' : 'свернуть';
