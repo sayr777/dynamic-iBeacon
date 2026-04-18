@@ -1,24 +1,47 @@
 // Прототип iBeacon-метки на ProMicro NRF52840 v1940 (nice!nano clone)
 //
+// Статус: РАБОЧИЙ КОД — протестирован 18 апреля 2026
+//
+// Тест на реальной плате (ProMicro NRF52840 v1940, COM6):
+//   ========================================
+//   BLE Tag  TagID=42   SlotDuration=10s
+//   UUID     E2C56DB5-DFFB-48D2-B060-D0F5A71096E0
+//   ========================================
+//   [slot    2] TagID=42  Major=0x4B10  Minor=0x545F  MAC=EB:F9:80:25:0E:94
+//   [slot    3] TagID=42  Major=0x256A  Minor=0x7E30  MAC=C1:CC:71:D1:7F:82
+//   [slot    4] TagID=42  Major=0xA410  Minor=0xA150  MAC=F0:EB:09:70:D9:86
+//   [slot    5] TagID=42  Major=0x2C5C  Minor=0x8F92  MAC=DE:27:9D:15:76:C6
+//   [slot    6] TagID=42  Major=0x305E  Minor=0xC636  MAC=D6:F4:13:DF:AC:28
+//   [slot    7] TagID=42  Major=0xE896  Minor=0xFC0C  MAC=F0:F4:DE:0D:68:E3
+//
 // Сборка:
+//   cd prototype/firmware/tinygo
+//   go mod tidy
 //   tinygo build -o firmware.uf2 -target=nicenano .
 //
-// Прошивка:
-//   Дважды нажать RESET → диск NICENANO появится в проводнике
-//   Скопировать firmware.uf2 на диск
+// Прошивка (автоматически через tinygo):
+//   tinygo flash -target=nicenano -port COM6 .    # Windows
+//   tinygo flash -target=nicenano -port /dev/cu.usbmodemXXXX .  # macOS
+//
+// Прошивка (вручную UF2):
+//   Дважды нажать RST→GND → диск NICENANO → скопировать firmware.uf2
 //
 // Мониторинг:
-//   tinygo monitor -port COM8
+//   tinygo monitor -port COM6      # Windows
+//   tinygo monitor -port /dev/cu.usbmodemXXXX  # macOS
 //
-// Зависимости:
-//   go get tinygo.org/x/bluetooth
+// Требования:
+//   Go 1.22–1.24  (TinyGo 0.40.x не поддерживает Go 1.25+)
+//   TinyGo 0.40.x
+//   tinygo.org/x/bluetooth v0.10.0
 //
-// Алгоритм (упрощённый, для тестирования):
-//   - слот считается от uptime (не от unix-time)
-//   - SlotDuration = 10s (не 5 мин) — удобно для отладки
-//   - AES-128 ECB настоящий (не заглушка)
-//   - Major/Minor/MAC берутся из AES-вывода
-//   - LED мигает при каждом обновлении слота
+// Алгоритм:
+//   - слот считается от uptime (прототип) / unix_time (production)
+//   - SlotDuration = 10s для отладки, production = 5 * time.Minute
+//   - AES-128 ECB: crypto/aes (стандартная библиотека Go)
+//   - Major = AES_out[0:2], Minor = AES_out[2:4], MAC = AES_out[4:10]
+//   - MAC[0] | 0xC0 → Random Static BLE address (BLE spec bits 46-47)
+//   - LED P0.15 active HIGH: 3 мигания при старте, 2 при смене слота
 
 package main
 
@@ -33,7 +56,8 @@ import (
 
 var adapter = bluetooth.DefaultAdapter
 
-// LED встроенный на ProMicro NRF52840 v1940 — P0.15 (active low)
+// LED встроенный на ProMicro NRF52840 v1940 — P0.15, active HIGH
+// (led.High() = ON, led.Low() = OFF)
 // Если у вашей платы другой пин — поменяйте здесь
 var led = machine.LED
 
