@@ -1,13 +1,15 @@
-# Компоненты: даташиты и закупка
+﻿# Компоненты: даташиты и закупка
 
-Платформа: **YJ-16013 (nRF52832)** + **ER14505H-LD**.  
+Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)** + **ER14505H-LD**.  
 Все ссылки проверены. Альтернативные поставщики указаны где возможно.
 
 ---
 
 ## BLE-модуль
 
-### YJ-16013 (nRF52832, основной)
+### [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832, основной)
+
+Локальная карточка модуля в проекте: [`specs/yj-16013.md`](yj-16013.md)
 
 | Параметр | Значение |
 |---|---|
@@ -28,16 +30,9 @@
 - [nRF5 SDK документация](https://infocenter.nordicsemi.com/topic/sdk_nrf5_v17.1.0/index.html)
 - [SoftDevice S112 (Broadcaster-only)](https://infocenter.nordicsemi.com/topic/sdk_nrf5_v17.1.0/group__nrf__sdm.html)
 
-### E73-2G4M04S1A (nRF52810, альтернатива для серийного производства)
+Альтернативный модуль `E73-2G4M04S1A (nRF52810)` вынесен в эксперименты:
 
-| Параметр | Значение |
-|---|---|
-| SoC | Nordic nRF52810 (ARM Cortex-M4, BLE 5.0) |
-| Flash / RAM | 192 KB / 24 KB |
-| Пин RESET | ❌ отсутствует |
-
-**Покупка:**
-- LCSC: [E73-2G4M04S1A — C2687940](https://www.lcsc.com/product-detail/RF-Modules_Ebyte-E73-2G4M04S1A_C2687940.html) (~$3.12/шт)
+- [`experiments/e73-nrf52810-alternative.md`](../experiments/e73-nrf52810-alternative.md) — архивная карточка альтернативного модуля и ссылка на закупку.
 
 ---
 

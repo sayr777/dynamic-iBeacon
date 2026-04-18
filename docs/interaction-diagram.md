@@ -1,6 +1,6 @@
-# Диаграммы взаимодействия
+﻿# Диаграммы взаимодействия
 
-Платформа: **`YJ-16013` (nRF52832)**.  
+Платформа: **[YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) (nRF52832)**.  
 Подробный протокол: [`protocol.md`](protocol.md)
 
 ---
@@ -96,7 +96,7 @@ sequenceDiagram
 
     Note over AIR,SRV: Сканер передаёт (Major, Minor, RSSI, ts) на сервер
 
-    SRV ->>  SRV  : slot=ts/300; AES×30000 → tag_id=42 (<1 мс)
+    SRV ->>  SRV  : slot = ts/300, AES x 30000, tag_id = 42, около 1 мс
 ```
 
 ---

@@ -1,11 +1,11 @@
-# Протокол работы метки
+﻿# Протокол работы метки
 
 > Диаграммы FSM и sequence в альтернативном формате: [`docs/interaction-diagram.md`](interaction-diagram.md)  
 > Полный расчёт ресурса батареи: [`docs/battery-life-estimate.md`](battery-life-estimate.md)
 
 ## Описание
 
-Метка (`YJ-16013`, `nRF52832`) работает полностью автономно без какого-либо управления извне.
+Метка ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832), `nRF52832`) работает полностью автономно без какого-либо управления извне.
 
 ### Каждые 2 секунды (дневной цикл)
 
@@ -130,7 +130,7 @@ sequenceDiagram
         Note over MCU: System OFF ~1.5 µА (1999 мс)
     end
 
-    Note over SRV: identify(Major, Minor) → TAG_ID за < 1 мс
+    Note over SRV: identify(Major, Minor) -> TAG_ID примерно за 1 мс
 ```
 
 ---

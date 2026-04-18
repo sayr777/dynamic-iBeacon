@@ -1,4 +1,4 @@
-# Руководство по установке и прошивке прототипа
+﻿# Руководство по установке и прошивке прототипа
 
 **Плата:** ProMicro NRF52840 v1940 (клон nice!nano v2.0)  
 **Прошивка:** TinyGo 0.40.x + `tinygo.org/x/bluetooth`  
@@ -486,7 +486,7 @@ slot = unix_time / 300         // 300 секунд = 5 минут
   └──────────────────────────────────────────┘
 ```
 
-В production (`nRF52832 YJ-16013`) вместо `sleep 100ms` используется  
+В production для `nRF52832` на [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) вместо `sleep 100ms` используется  
 `sd_power_system_off()` + пробуждение по RTC каждые 2 секунды.
 
 ### iBeacon-пакет в эфире

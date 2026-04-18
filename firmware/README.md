@@ -1,4 +1,4 @@
-# Прошивка nRF52832 (YJ-16013)
+﻿# Прошивка nRF52832 ([YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832))
 
 ## Назначение
 
@@ -16,7 +16,7 @@
 | Параметр | Значение |
 |---|---|
 | SoC | `nRF52832` (Nordic Semiconductor) |
-| Модуль | `EBYTE YJ-16013` |
+| Модуль | EBYTE [YJ-16013](https://device.report/shenzhen-holyiot-technology/nrf52832) |
 | Альтернативный модуль | `E73-2G4M04S1A` (`nRF52810`) — для серийного производства 1000+ шт |
 | SDK | `nRF5 SDK 17.1.x` (рекомендуется) или `nRF Connect SDK` (Zephyr) |
 | BLE стек | `SoftDevice S112` (только Broadcaster) |
