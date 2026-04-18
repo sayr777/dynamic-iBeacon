@@ -71,7 +71,8 @@ major = out[0:2]   minor = out[2:4]   mac[3:6] = out[4:7]
 - [`server/README.md`](server/README.md) — идентификация метки на сервере
 - [`server/keygen.py`](server/keygen.py) — генерация ключа для новой метки
 - [`server/lookup.py`](server/lookup.py) — поиск метки по `(Major, Minor)`
-- [`specs/README.md`](specs/README.md) — источники по компонентам
+- [`specs/README.md`](specs/README.md) — **даташиты и ссылки на закупку** всех компонентов
+- [`prototype/README.md`](prototype/README.md) — **прототип** на ProMicro NRF52840 v1940 (TinyGo, USB UF2)
 
 ## Связанные проекты
 

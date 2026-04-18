@@ -1,5 +1,8 @@
 # Протокол работы метки
 
+> Диаграммы FSM и sequence в альтернативном формате: [`docs/interaction-diagram.md`](interaction-diagram.md)  
+> Полный расчёт ресурса батареи: [`docs/battery-life-estimate.md`](battery-life-estimate.md)
+
 ## Описание
 
 Метка (`YJ-16013`, `nRF52832`) работает полностью автономно без какого-либо управления извне.
