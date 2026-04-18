@@ -210,6 +210,13 @@
   <div class="card">
     <div class="card-title">Входные данные iBeacon</div>
 
+    <div class="field uuid-field">
+      <label>UUID (hex, 32 символа — из nRF Connect)</label>
+      <input id="l-uuid" placeholder="например: A1B2C3D4E5F601020304050607080910"
+        maxlength="36" autocomplete="off" spellcheck="false"
+        oninput="this.value=this.value.replace(/[^0-9a-fA-F\-]/g,'').toUpperCase()">
+    </div>
+
     <div class="row">
       <div class="field">
         <label>Major (hex)</label>
@@ -286,28 +293,30 @@
     <div class="card-title">Как пользоваться</div>
     <div style="display:flex;flex-direction:column;gap:7px;
       font-size:.85rem;color:var(--muted)">
-      <p>1. Откройте <b style="color:var(--text)">nRF Connect</b> на смартфоне →
-        Scan → найдите устройство с нужным UUID</p>
-      <p>2. Скопируйте <b style="color:var(--text)">Major</b> и
-        <b style="color:var(--text)">Minor</b> из Manufacturer Data</p>
-      <p>3. Или возьмите из serial-лога:
+      <p>1. Откройте <b style="color:var(--text)">nRF Connect</b> → Scan →
+        тапните на метке → Manufacturer Data</p>
+      <p>2. Скопируйте <b style="color:var(--text)">UUID, Major, Minor</b></p>
+      <p>3. Или возьмите из serial-лога прошивки:
         <code style="background:var(--surface2);padding:1px 5px;
-          border-radius:4px;font-size:.76rem">Major=0x4B10 Minor=0x545F</code></p>
+          border-radius:4px;font-size:.76rem">UUID=... Major=0xXXXX Minor=0xXXXX</code></p>
       <hr>
+      <p class="warn">⚠️ UUID, Major, Minor и MAC — все динамические, меняются каждый слот</p>
       <p class="warn">⚠️ KEY должен совпадать с ключом в прошивке метки</p>
     </div>
   </div>
 
   <!-- Алгоритм -->
   <div class="card">
-    <div class="card-title">Алгоритм</div>
+    <div class="card-title">Алгоритм (схема v2)</div>
     <pre>для TagID в [tMin..tMax]:
   для Slot в [sMin..sMax]:
-    block = TagID[2] ‖ Slot[4] ‖ 0x00[10]
-    out   = AES-128-ECB(KEY, block)
-    если out[0:2]==Major И out[2:4]==Minor:
+    b0 = TagID[2] ‖ Slot[4] ‖ 0x00 ‖ 0(9)   ← variant=0
+    b1 = TagID[2] ‖ Slot[4] ‖ 0x01 ‖ 0(9)   ← variant=1
+    uuid_cand = AES-128-ECB(KEY, b0)
+    adv_cand  = AES-128-ECB(KEY, b1)
+    если uuid_cand==UUID И adv_cand[0:2]==Major И adv_cand[2:4]==Minor:
       TagID найден!
-      MAC = out[4]|0xC0 ‖ out[5:10]</pre>
+      MAC = adv_cand[4]|0xC0 ‖ adv_cand[5:10]</pre>
   </div>
 </div>
 
@@ -318,12 +327,6 @@
 
   <div class="card">
     <div class="card-title">Настройки сканера</div>
-
-    <div class="field uuid-field">
-      <label>UUID наших меток</label>
-      <input id="s-uuid" value="E2C56DB5-DFFB-48D2-B060-D0F5A71096E0"
-        autocomplete="off" spellcheck="false" placeholder="UUID (32 hex без дефисов или со)">
-    </div>
 
     <div class="field">
       <label>AES-128 KEY</label>
@@ -336,14 +339,36 @@
 
     <div class="row">
       <div class="field">
+        <label>Режим слотов</label>
+        <select id="s-mode" onchange="onScanModeChange()">
+          <option value="proto">Прототип (0..N, uptime/10s)</option>
+          <option value="prod">Production (unix/300s ±)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" id="s-proto-row">
+      <div class="field">
         <label>TagID до</label>
         <input id="s-tmax" type="number" value="100" min="1" max="65535">
+      </div>
+      <div class="field">
+        <label>Слоты 0..</label>
+        <input id="s-smax" type="number" value="500" min="1" max="100000">
+      </div>
+    </div>
+    <div class="row" id="s-prod-row" style="display:none">
+      <div class="field">
+        <label>TagID до</label>
+        <input id="s-tmax2" type="number" value="100" min="1" max="65535">
       </div>
       <div class="field">
         <label>Слоты ±</label>
         <input id="s-srange" type="number" value="5" min="1" max="50">
       </div>
     </div>
+
+    <p class="hint" id="s-table-size"></p>
 
     <button class="btn-primary" id="s-btn" onclick="toggleScan()">
       📶 Начать сканирование
@@ -430,16 +455,19 @@ async function aesECB(cryptoKey, block16) {
   return new Uint8Array(out, 0, 16);
 }
 
-function buildBlock(tagID, slot) {
+// variant=0 → UUID block, variant=1 → adv (Major/Minor/MAC) block
+function buildBlock(tagID, slot, variant) {
   const b = new Uint8Array(16);
   b[0]=(tagID>>8)&0xFF; b[1]=tagID&0xFF;
   b[2]=(slot>>24)&0xFF; b[3]=(slot>>16)&0xFF;
   b[4]=(slot>> 8)&0xFF; b[5]= slot     &0xFF;
+  b[6]= (variant||0) & 0xFF;
   return b;
 }
 
-function deriveMAC(out) {
-  return [(out[4]|0xC0),out[5],out[6],out[7],out[8],out[9]]
+// advOut — вывод AES variant=1
+function deriveMAC(advOut) {
+  return [(advOut[4]|0xC0),advOut[5],advOut[6],advOut[7],advOut[8],advOut[9]]
     .map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(':');
 }
 
@@ -503,23 +531,30 @@ document.getElementById('l-key').addEventListener('input',e=>{
 });
 
 function startLookup() {
+  const uuidRaw =document.getElementById('l-uuid').value.trim().replace(/-/g,'');
   const majorStr=document.getElementById('l-major').value.trim();
   const minorStr=document.getElementById('l-minor').value.trim();
   const keyStr  =document.getElementById('l-key').value.trim();
   let ok=true;
   const chk=(id,re)=>{
     const el=document.getElementById(id);
-    if(!re.test(el.value.trim())){el.classList.add('error');ok=false;}
+    if(!re.test(el.value.trim().replace(/-/g,''))){el.classList.add('error');ok=false;}
     else el.classList.remove('error');
   };
+  // UUID необязателен, но если введён — должен быть 32 hex
+  const uuidEl=document.getElementById('l-uuid');
+  if(uuidRaw && !/^[0-9a-fA-F]{32}$/.test(uuidRaw)){
+    uuidEl.classList.add('error'); ok=false;
+  } else { uuidEl.classList.remove('error'); }
   chk('l-major',/^[0-9a-fA-F]{1,4}$/);
   chk('l-minor',/^[0-9a-fA-F]{1,4}$/);
   chk('l-key',  /^[0-9a-fA-F]{32}$/);
   if(!ok) return;
 
-  const major=parseInt(majorStr,16), minor=parseInt(minorStr,16);
-  const tMin=parseInt(document.getElementById('l-tmin').value)||0;
-  const tMax=parseInt(document.getElementById('l-tmax').value)||100;
+  const uuid  = uuidRaw.toUpperCase() || null;
+  const major = parseInt(majorStr,16), minor=parseInt(minorStr,16);
+  const tMin  = parseInt(document.getElementById('l-tmin').value)||0;
+  const tMax  = parseInt(document.getElementById('l-tmax').value)||100;
   const {min:sMin,max:sMax}=getSlotRange();
 
   document.getElementById('l-btn').disabled=true;
@@ -547,7 +582,7 @@ function startLookup() {
     }
   };
   lWorker.onerror=e=>{showLError(e.message);lDone();};
-  lWorker.postMessage({keyHex:keyStr,major,minor,tagMin:tMin,tagMax:tMax,slotMin:sMin,slotMax:sMax});
+  lWorker.postMessage({keyHex:keyStr,uuid,major,minor,tagMin:tMin,tagMax:tMax,slotMin:sMin,slotMax:sMax});
 }
 
 function lDone(){
@@ -593,8 +628,77 @@ function showLError(msg){
 // Scanner
 // ══════════════════════════════════════════════════════
 let scanning=false, bleScan=null;
-const devices = new Map(); // mac → {name,rssi,major,minor,tagID,ts}
+const devices = new Map();
 let scanTimer=null;
+
+// Таблица: uuidHex(lowercase,32) → {tagID, slot, major, minor, mac}
+// Строится один раз перед началом сканирования
+let scanTable = new Map();
+
+function onScanModeChange() {
+  const prod = document.getElementById('s-mode').value==='prod';
+  document.getElementById('s-proto-row').style.display = prod?'none':'';
+  document.getElementById('s-prod-row').style.display  = prod?'':'none';
+  updateScanTableSize();
+}
+
+function getScanSlotRange() {
+  const mode = document.getElementById('s-mode').value;
+  if (mode==='prod') {
+    const cur = Math.floor(Date.now()/1000/300);
+    const r   = parseInt(document.getElementById('s-srange').value)||5;
+    return {sMin: Math.max(0,cur-r), sMax: cur+r};
+  }
+  return {sMin:0, sMax: parseInt(document.getElementById('s-smax').value)||500};
+}
+
+function getScanTMax() {
+  const mode = document.getElementById('s-mode').value;
+  const id   = mode==='prod' ? 's-tmax2' : 's-tmax';
+  return parseInt(document.getElementById(id).value)||100;
+}
+
+function updateScanTableSize() {
+  const tMax = getScanTMax();
+  const {sMin,sMax} = getScanSlotRange();
+  const n = (tMax+1)*(sMax-sMin+1);
+  document.getElementById('s-table-size').textContent =
+    `Таблица: ${n.toLocaleString('ru')} записей · ~${(n*2/500000*1000).toFixed(0)} мс`;
+}
+
+// Строим lookup-таблицу uuid→{tagID,slot,major,minor,mac}
+async function buildScanTable() {
+  const keyStr = document.getElementById('s-key').value.trim();
+  if(!/^[0-9a-fA-F]{32}$/.test(keyStr)) return false;
+
+  const tMax = getScanTMax();
+  const {sMin,sMax} = getScanSlotRange();
+  const total = (tMax+1)*(sMax-sMin+1);
+
+  setScanStatus('scanning',`Строится таблица: 0 / ${total.toLocaleString('ru')}…`);
+  const ck = await getKey(keyStr);
+  const table = new Map();
+  let done=0;
+
+  for(let tagID=0; tagID<=tMax; tagID++) {
+    for(let slot=sMin; slot<=sMax; slot++) {
+      const uuidOut = await aesECB(ck, buildBlock(tagID,slot,0));
+      const advOut  = await aesECB(ck, buildBlock(tagID,slot,1));
+      const uuidHex = [...uuidOut].map(b=>b.toString(16).padStart(2,'0')).join('');
+      const major   = (advOut[0]<<8)|advOut[1];
+      const minor   = (advOut[2]<<8)|advOut[3];
+      const mac     = deriveMAC(advOut);
+      table.set(uuidHex, {tagID, slot, major, minor, mac});
+      done++;
+    }
+    if(tagID%5===4) {
+      setScanStatus('scanning',`Строится таблица: ${done.toLocaleString('ru')} / ${total.toLocaleString('ru')}…`);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  scanTable = table;
+  return true;
+}
 
 function toggleScan() {
   if(scanning) stopScan(); else startScan();
@@ -606,20 +710,29 @@ async function startScan() {
     setScanStatus('error','Web Bluetooth Scan не поддерживается в этом браузере');
     return;
   }
+  document.getElementById('s-btn').disabled=true;
   try {
-    setScanStatus('scanning','Запрос разрешения…');
+    const ok = await buildScanTable();
+    if(!ok) {
+      setScanStatus('error','Введите корректный KEY (32 hex)');
+      document.getElementById('s-btn').disabled=false;
+      return;
+    }
+    setScanStatus('scanning','Запрос разрешения BLE…');
     bleScan = await navigator.bluetooth.requestLEScan({
       acceptAllAdvertisements: true,
       keepRepeatedDevices: true
     });
     scanning=true;
+    document.getElementById('s-btn').disabled=false;
     document.getElementById('s-btn').textContent='⏹ Остановить';
     document.getElementById('s-btn').classList.add('stop');
-    setScanStatus('scanning','Сканирование…');
+    setScanStatus('scanning',`Сканирование… (таблица: ${scanTable.size} записей)`);
     navigator.bluetooth.addEventListener('advertisementreceived', onAdv);
     scanTimer=setInterval(updateDeviceList,1000);
   } catch(e) {
     document.getElementById('s-compat-card').style.display='';
+    document.getElementById('s-btn').disabled=false;
     setScanStatus('error','Ошибка: '+e.message);
   }
 }
@@ -629,6 +742,7 @@ function stopScan() {
   navigator.bluetooth.removeEventListener('advertisementreceived', onAdv);
   clearInterval(scanTimer);
   scanning=false;
+  scanTable.clear();
   document.getElementById('s-btn').textContent='📶 Начать сканирование';
   document.getElementById('s-btn').classList.remove('stop');
   setScanStatus('','Сканирование остановлено');
@@ -644,7 +758,6 @@ function setScanStatus(state,text) {
 function parseIBeacon(mfrData) {
   if(!mfrData || !mfrData.has(0x004C)) return null;
   const d=new Uint8Array(mfrData.get(0x004C).buffer);
-  // iBeacon: 02 15 UUID[16] Major[2] Minor[2] TxPower[1]
   if(d.length<23 || d[0]!==0x02 || d[1]!==0x15) return null;
   const uuid=[...d.slice(2,18)].map(b=>b.toString(16).padStart(2,'0')).join('');
   const major=(d[18]<<8)|d[19];
@@ -652,83 +765,45 @@ function parseIBeacon(mfrData) {
   return {uuid, major, minor};
 }
 
-function targetUUID() {
-  return document.getElementById('s-uuid').value
-    .replace(/-/g,'').toUpperCase();
-}
+function onAdv(event) {
+  const devId = event.device.id;
+  const name  = event.name || event.device.name || '';
+  const rssi  = event.rssi;
+  const ib    = parseIBeacon(event.manufacturerData);
 
-async function onAdv(event) {
-  const mac  = event.device.id; // в браузере это внутренний ID, не MAC
-  const name = event.name || event.device.name || '';
-  const rssi = event.rssi;
-  const ib   = parseIBeacon(event.manufacturerData);
-
-  // Определяем ключ устройства: если iBeacon — по uuid+major+minor,
-  // иначе по device.id
-  const key = ib ? `ib:${ib.uuid}:${ib.major}:${ib.minor}` : `dev:${mac}`;
+  // Ключ: для iBeacon — по динамическому uuid+major+minor; иначе — по device.id
+  const key = ib ? `ib:${ib.uuid}:${ib.major}:${ib.minor}` : `dev:${devId}`;
 
   const existing = devices.get(key) || {};
-  const entry = {
-    ...existing,
-    name, rssi,
-    major: ib?.major, minor: ib?.minor,
-    uuid:  ib?.uuid,
-    ours:  ib ? ib.uuid===targetUUID() : false,
-    ts: Date.now()
-  };
+  const entry = { ...existing, name, rssi, ts: Date.now() };
 
-  // Если это наша метка и tagID ещё не определён — запустить поиск
-  if(entry.ours && entry.tagID===undefined && !entry.searching) {
-    entry.searching=true;
-    devices.set(key,entry);
-    lookupTag(key, ib.major, ib.minor);
-  } else {
-    devices.set(key,entry);
+  if(ib) {
+    entry.major = ib.major;
+    entry.minor = ib.minor;
+    entry.uuid  = ib.uuid;
+
+    // Мгновенная проверка по pre-built таблице (O(1))
+    if(scanTable.size > 0) {
+      const match = scanTable.get(ib.uuid);
+      if(match && match.major===ib.major && match.minor===ib.minor) {
+        entry.ours  = true;
+        entry.tagID = match.tagID;
+        entry.slot  = match.slot;
+        entry.mac   = match.mac;
+      } else if(!entry.ours) {
+        entry.ours = false;
+      }
+    }
   }
+
+  devices.set(key, entry);
   renderDevices();
 }
 
-async function lookupTag(key, major, minor) {
-  const keyStr = document.getElementById('s-key').value.trim();
-  if(!/^[0-9a-fA-F]{32}$/.test(keyStr)) return;
-
-  const tMax   = parseInt(document.getElementById('s-tmax').value)||100;
-  const sRange = parseInt(document.getElementById('s-srange').value)||5;
-  const curSlot= Math.floor(Date.now()/1000/300);
-  const sMin   = Math.max(0, curSlot-sRange);
-  const sMax   = curSlot+sRange;
-
-  try {
-    const cryptoKey = await getKey(keyStr);
-    for(let tagID=0; tagID<=tMax; tagID++) {
-      for(let slot=sMin; slot<=sMax; slot++) {
-        const out = await aesECB(cryptoKey, buildBlock(tagID, slot));
-        const m=(out[0]<<8)|out[1], n=(out[2]<<8)|out[3];
-        if(m===major && n===minor) {
-          const mac=deriveMAC(out);
-          const d=devices.get(key);
-          if(d){ d.tagID=tagID; d.slot=slot; d.mac=mac; d.searching=false; }
-          renderDevices();
-          return;
-        }
-      }
-      // Уступить поток каждые 50 tagID
-      if(tagID%50===49) await new Promise(r=>setTimeout(r,0));
-    }
-    const d=devices.get(key);
-    if(d){ d.tagID=null; d.searching=false; }
-    renderDevices();
-  } catch(e) {
-    const d=devices.get(key);
-    if(d){ d.tagID=null; d.searching=false; }
-    renderDevices();
-  }
-}
-
 function rssiToLevel(rssi) {
-  if(rssi>=−55) return 4;
-  if(rssi>=−70) return 3;
-  if(rssi>=−85) return 2;
+  if(rssi>=-55) return 4;
+  if(rssi>=-70) return 3;
+  if(rssi>=-85) return 2;
   return 1;
 }
 
@@ -753,7 +828,7 @@ function renderDevices() {
   const sorted=[...devices.entries()].sort(([,a],[,b])=>{
     if(a.ours&&!b.ours) return -1;
     if(!a.ours&&b.ours) return 1;
-    return (b.rssi||−100)-(a.rssi||−100);
+    return (b.rssi||-100)-(a.rssi||-100);
   });
 
   // Обновить или создать карточки
@@ -785,14 +860,16 @@ function renderDevices() {
     const majorH=d.major!=null?d.major.toString(16).padStart(4,'0').toUpperCase():'—';
     const minorH=d.minor!=null?d.minor.toString(16).padStart(4,'0').toUpperCase():'—';
 
+    const uuidShort = d.uuid ? d.uuid.slice(0,8).toUpperCase()+'…' : '';
     card.innerHTML=`
       <div class="dev-name">
         ${d.ours?'🟢':'⚪'} ${d.name||'(no name)'}
         ${tagBadge}
       </div>
-      <div class="dev-rssi">${rssiBar(d.rssi||−100)}</div>
+      <div class="dev-rssi">${rssiBar(d.rssi||-100)}</div>
       <div class="dev-detail">
         ${d.rssi!=null?`<span>RSSI ${d.rssi} dBm</span>`:''}
+        ${uuidShort?`<span title="${(d.uuid||'').toUpperCase()}">${uuidShort}</span>`:''}
         ${d.major!=null?`<span>M:${majorH} m:${minorH}</span>`:''}
         ${d.mac?`<span>${d.mac}</span>`:''}
         ${d.slot!=null?`<span>slot ${d.slot}</span>`:''}
@@ -816,7 +893,14 @@ setInterval(()=>{ // Обновлять таймер prod-слота
       Math.floor(Date.now()/1000/300);
 },10000);
 
+// Обновлять размер таблицы при изменении полей сканера
+['s-tmax','s-tmax2','s-smax','s-srange'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input', updateScanTableSize);
+});
+
 updateOps();
+updateScanTableSize();
 </script>
 </body>
 </html>
