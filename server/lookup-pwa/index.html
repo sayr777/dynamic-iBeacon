@@ -374,6 +374,12 @@
       📶 Начать сканирование
     </button>
 
+    <button class="btn-sm" id="s-sim-btn" onclick="simulateScan()"
+      style="width:100%;margin-top:-6px"
+      title="Симулирует получение iBeacon с данными реальной платы (TagID=42, slot текущий)">
+      🧪 Симуляция (тест без BLE)
+    </button>
+
     <div class="scanner-status" id="s-status">
       <div class="dot" id="s-dot"></div>
       <span id="s-status-txt">Нажмите «Начать сканирование»</span>
@@ -881,6 +887,77 @@ function renderDevices() {
 
 function clearDevices(){
   devices.clear(); renderDevices();
+}
+
+// ══════════════════════════════════════════════════════
+// Симуляция — генерирует iBeacon с данными реальной платы
+// Использует текущий ключ и таблицу, показывает что сканер найдёт
+// ══════════════════════════════════════════════════════
+async function simulateScan() {
+  const keyStr = document.getElementById('s-key').value.trim();
+  if(!/^[0-9a-fA-F]{32}$/.test(keyStr)) {
+    alert('Введите корректный KEY (32 hex символа)'); return;
+  }
+  const tMax = getScanTMax();
+  const {sMin,sMax} = getScanSlotRange();
+
+  // Строим таблицу если ещё не построена
+  if(scanTable.size === 0) {
+    const ok = await buildScanTable();
+    if(!ok) return;
+  }
+
+  setScanStatus('scanning','Симуляция…');
+
+  // Берём первую запись из таблицы для заданного TagID=42 (или первый найденный)
+  const ck = await getKey(keyStr);
+  const simTagID = Math.min(42, tMax);
+
+  // Вычисляем текущий слот в зависимости от режима
+  const mode = document.getElementById('s-mode').value;
+  const simSlot = mode==='prod'
+    ? Math.floor(Date.now()/1000/300)
+    : Math.max(sMin, Math.min(sMax, sMin + 2)); // slot sMin+2 для наглядности
+
+  // Генерируем UUID и adv как это делает прошивка
+  const uuidOut = await aesECB(ck, buildBlock(simTagID, simSlot, 0));
+  const advOut  = await aesECB(ck, buildBlock(simTagID, simSlot, 1));
+
+  const uuidHex = [...uuidOut].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const major   = (advOut[0]<<8)|advOut[1];
+  const minor   = (advOut[2]<<8)|advOut[3];
+
+  // Симулируем несколько "посторонних" iBeacon (не наших)
+  for(let i=0; i<3; i++) {
+    const fakeUuid = [...crypto.getRandomValues(new Uint8Array(16))]
+      .map(b=>b.toString(16).padStart(2,'0')).join('');
+    const fakeMaj = Math.floor(Math.random()*0xFFFF);
+    const fakeMin = Math.floor(Math.random()*0xFFFF);
+    const fakeKey = `ib:${fakeUuid}:${fakeMaj}:${fakeMin}`;
+    devices.set(fakeKey, {
+      name: `Unknown BLE ${i+1}`, rssi: -70-i*5,
+      uuid: fakeUuid, major: fakeMaj, minor: fakeMin,
+      ours: false, ts: Date.now()
+    });
+  }
+
+  // Симулируем нашу метку
+  const ibKey = `ib:${uuidHex}:${major}:${minor}`;
+  const match = scanTable.get(uuidHex);
+  devices.set(ibKey, {
+    name: `BLE Tag (TagID=${simTagID})`,
+    rssi: -55,
+    uuid: uuidHex,
+    major, minor,
+    ours:  !!(match && match.major===major && match.minor===minor),
+    tagID: match?.tagID,
+    slot:  match?.slot,
+    mac:   match ? deriveMAC(advOut) : undefined,
+    ts: Date.now()
+  });
+
+  setScanStatus('scanning',`Симуляция: TagID=${simTagID} slot=${simSlot}`);
+  renderDevices();
 }
 
 // ══════════════════════════════════════════════════════
