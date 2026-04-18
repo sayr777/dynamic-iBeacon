@@ -277,9 +277,6 @@ func updateAdvertisement(adv *bluetooth.Advertisement, config TagConfig, slot ui
 	}))
 
 	must("start adv", adv.Start())
-
-	// Мигнуть LED — слот обновился
-	blinkLED(2)
 }
 
 // ──────────────────────────────────────────────
@@ -329,10 +326,12 @@ func main() {
 	blinkLED(3)
 
 	var lastSlot uint32 = ^uint32(0) // невалидный → первое обновление немедленно
+	lastBlink := time.Now().Add(-2 * time.Second) // первый blink сразу
 
 	for {
 		slot := currentSlot(cfg)
 
+		// Обновить параметры при смене слота
 		if slot != lastSlot {
 			major, minor, mac := deriveParams(cfg, slot)
 			fmt.Printf("[slot %4d] TagID=%d  Major=0x%04X  Minor=0x%04X  MAC=%s\n",
@@ -341,8 +340,12 @@ func main() {
 			lastSlot = slot
 		}
 
-		// Ждём смены слота — проверяем каждые 100ms
-		// В production здесь будет System OFF / WFE
+		// Мигнуть LED каждые 2 секунды — имитация посылки (как в production)
+		if time.Since(lastBlink) >= 2*time.Second {
+			blinkLED(1)
+			lastBlink = time.Now()
+		}
+
 		time.Sleep(100 * time.Millisecond)
 	}
 }
