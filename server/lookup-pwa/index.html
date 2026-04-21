@@ -296,6 +296,34 @@
 
   </div>
 
+  <!-- Ввод из БНСО -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title">📟 Данные из БНСО</div>
+      <button class="btn-sm" id="bnso-toggle" onclick="toggleBnso()">развернуть</button>
+    </div>
+    <div id="bnso-body" style="display:none">
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+        <div class="row">
+          <div class="field" style="flex:0 0 170px">
+            <label>Модель БНСО</label>
+            <select id="l-bnso-model" onchange="onBnsoInput()">
+              <option value="умка">Умка (Wialon IPS)</option>
+              <option value="скаут">Скаут (EGTS)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>ID метки из телематики</label>
+            <input id="l-bnso-id" type="number" placeholder="напр. 1145128914"
+              min="0" inputmode="numeric" autocomplete="off"
+              oninput="onBnsoInput()">
+          </div>
+        </div>
+        <div class="hint" id="l-bnso-hint" style="font-family:var(--mono)"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Справочник остановок -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -582,6 +610,99 @@ function toggleAlgo() {
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   btn.textContent    = open ? 'развернуть' : 'свернуть';
+}
+
+function toggleBnso() {
+  const body = document.getElementById('bnso-body');
+  const btn  = document.getElementById('bnso-toggle');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  btn.textContent    = open ? 'развернуть' : 'свернуть';
+}
+
+function onBnsoInput() {
+  const model = document.getElementById('l-bnso-model').value;
+  const rawStr = document.getElementById('l-bnso-id').value.trim();
+  const hint  = document.getElementById('l-bnso-hint');
+
+  if (!rawStr) { hint.textContent = ''; return; }
+
+  const rawId = parseInt(rawStr, 10);
+  if (isNaN(rawId) || rawId < 0) {
+    hint.textContent = '⚠️ Некорректный ID';
+    return;
+  }
+
+  if (model === 'умка') {
+    const major = (rawId >>> 16) & 0xFFFF;
+    const minor = rawId & 0xFFFF;
+    hint.textContent = `Умка: Major = ${major},  Minor = ${minor}`;
+    document.getElementById('l-major').value = major;
+    document.getElementById('l-minor').value = minor;
+    scheduleAutoSearch();
+  } else {
+    hint.textContent = `Скаут: Major + Minor = ${rawId},  поиск по сумме…`;
+    scheduleSumSearch(rawId);
+  }
+}
+
+function scheduleSumSearch(idSum) {
+  clearTimeout(lDebounce);
+  document.getElementById('l-result').classList.remove('visible','found','notfound');
+  lDebounce = setTimeout(() => runSumSearch(idSum), 420);
+}
+
+async function runSumSearch(idSum) {
+  const keyStr = document.getElementById('l-key').value.trim();
+  if (!/^[0-9a-fA-F]{32}$/.test(keyStr)) {
+    document.getElementById('l-key').classList.add('error');
+    return;
+  }
+  document.getElementById('l-key').classList.remove('error');
+
+  const sr = document.getElementById('l-searching');
+  sr.classList.add('active');
+  const { slotMin: SEARCH_SLOT_MIN, slotMax: SEARCH_SLOT_MAX } = getSearchSlotRange();
+  document.getElementById('l-searching-txt').textContent =
+    `Скаут: сумма ${idSum}, TagID ${SEARCH_TAG_MIN}..${SEARCH_TAG_MAX}, слоты ${SEARCH_SLOT_MIN}..${SEARCH_SLOT_MAX}…`;
+  document.getElementById('l-result').classList.remove('visible','found','notfound');
+
+  if (lWorker) { lWorker.terminate(); lWorker = null; }
+
+  lWorker = new Worker('./worker.js');
+  const t0 = performance.now();
+
+  lWorker.onmessage = ({data}) => {
+    if (data.type === 'progress') {
+      const pct = data.total ? Math.round(data.checked / data.total * 100) : 0;
+      document.getElementById('l-searching-txt').textContent =
+        `${data.checked.toLocaleString('ru')} / ${data.total.toLocaleString('ru')} (${pct}%)`;
+    } else if (data.type === 'found') {
+      sr.classList.remove('active');
+      showLFound(data, (performance.now() - t0).toFixed(0));
+      lWorker.terminate(); lWorker = null;
+    } else if (data.type === 'notfound') {
+      sr.classList.remove('active');
+      showLNotFound(data.checked, (performance.now() - t0).toFixed(0));
+      lWorker.terminate(); lWorker = null;
+    } else if (data.type === 'error') {
+      sr.classList.remove('active');
+      showLError(data.message);
+      lWorker.terminate(); lWorker = null;
+    }
+  };
+  lWorker.onerror = e => {
+    sr.classList.remove('active');
+    showLError(e.message);
+    lWorker.terminate(); lWorker = null;
+  };
+
+  lWorker.postMessage({
+    mode: 'sum', idSum,
+    keyHex: keyStr,
+    tagMin: SEARCH_TAG_MIN, tagMax: SEARCH_TAG_MAX,
+    slotMin: SEARCH_SLOT_MIN, slotMax: SEARCH_SLOT_MAX
+  });
 }
 
 function toggleBleHelp() {
