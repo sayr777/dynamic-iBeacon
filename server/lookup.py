@@ -9,8 +9,16 @@ lookup.py — идентификация BLE-метки по паре (Major, Mi
     major = out[0:2],  minor = out[2:4]
 
 Использование:
-    # Идентификация принятого пакета
+    # Идентификация принятого пакета напрямую
     python server/lookup.py --major 3A7F --minor C1B2 \
+        --key 2B7E151628AED2A6ABF7158809CF4F3C --num-tags 500
+
+    # Идентификация по ID из БНСО (Умка: ID=Major*65536+Minor)
+    python server/lookup.py --bnso-serial 87654321 --bnso-id 1145128914 \
+        --key 2B7E151628AED2A6ABF7158809CF4F3C --num-tags 500
+
+    # Идентификация по ID из БНСО (Скаут: ID=Major+Minor)
+    python server/lookup.py --bnso-serial 12345678 --bnso-id 19531 \
         --key 2B7E151628AED2A6ABF7158809CF4F3C --num-tags 500
 
     # Симуляция вывода конкретной метки
@@ -129,6 +137,46 @@ def aes128_ecb_encrypt(key: bytes, block: bytes) -> bytes:
         return aes128_ecb_encrypt_pure(key, block)
 
 
+# ---- Реестр БНСО ---------------------------------------------------------
+#
+# Формат: { 'серийный_номер': 'умка' | 'скаут' }
+#
+# Умка  (Wialon IPS):  ID = Major * 65536 + Minor  → Major и Minor восстанавливаются точно
+# Скаут (EGTS):        ID = Major + Minor           → восстановить точные значения нельзя,
+#                                                     но идентификация по сумме работает
+#
+# Заполните перед развёртыванием. Серийный номер — строка (как в логах БНСО).
+BNSO_REGISTRY: dict[str, str] = {
+    # '12345678': 'скаут',
+    # '87654321': 'умка',
+}
+
+
+def bnso_decode(serial: str, raw_id: int) -> tuple[str, int | None, int | None, int | None]:
+    """
+    Декодировать raw_id от БНСО в (model, major, minor, id_sum).
+
+    Умка:  возвращает (model, major, minor, None)
+    Скаут: возвращает (model, None,  None,  id_sum)
+
+    Raises ValueError если серийный номер не в реестре.
+    """
+    model = BNSO_REGISTRY.get(serial)
+    if model is None:
+        raise ValueError(
+            f"БНСО с серийным номером '{serial}' не найден в реестре. "
+            f"Добавьте запись в BNSO_REGISTRY в server/lookup.py"
+        )
+    if model == 'умка':
+        major = (raw_id >> 16) & 0xFFFF
+        minor = raw_id & 0xFFFF
+        return model, major, minor, None
+    elif model == 'скаут':
+        return model, None, None, raw_id
+    else:
+        raise ValueError(f"Неизвестная модель БНСО: '{model}'")
+
+
 # ---- Основной алгоритм ---------------------------------------------------
 
 SLOT_DURATION = 300  # секунд (5 минут)
@@ -166,6 +214,45 @@ def identify_tag(major: int, minor: int, key: bytes,
     return None
 
 
+def identify_tag_by_sum(id_sum: int, key: bytes,
+                        num_tags: int, unix_time: float = None) -> dict | None:
+    """
+    Найти метку по сумме Major+Minor (протокол Скаут: ID = Major + Minor).
+
+    Точные значения Major и Minor восстановить нельзя, но пара (tag_id, slot)
+    идентифицируется однозначно — сумма двух AES-выходов уникальна на практике.
+    """
+    if unix_time is None:
+        unix_time = time.time()
+
+    slot_now = int(unix_time) // SLOT_DURATION
+
+    for slot in [slot_now - 1, slot_now, slot_now + 1]:
+        for tag_id in range(0, num_tags + 1):
+            m, n, _ = compute_beacon_params(key, tag_id, slot)
+            if m + n == id_sum:
+                return {"tag_id": tag_id, "slot": slot}
+
+    return None
+
+
+def identify_tag_from_bnso(serial: str, raw_id: int, key: bytes,
+                           num_tags: int, unix_time: float = None) -> dict | None:
+    """
+    Идентификация метки по данным от БНСО.
+
+    По серийному номеру БНСО определяет модель устройства, применяет
+    соответствующий алгоритм декодирования и возвращает результат как
+    identify_tag() — dict {"tag_id", "slot"} или None.
+    """
+    model, major, minor, id_sum = bnso_decode(serial, raw_id)
+
+    if model == 'умка':
+        return identify_tag(major, minor, key, num_tags, unix_time)
+    else:  # скаут
+        return identify_tag_by_sum(id_sum, key, num_tags, unix_time)
+
+
 # ---- CLI -----------------------------------------------------------------
 
 def main():
@@ -184,9 +271,13 @@ def main():
                       help="Симулировать вывод конкретной метки")
     mode.add_argument("--major", type=str,
                       help="Major из принятого пакета (hex, например: 3A7F)")
+    mode.add_argument("--bnso-serial", type=str, metavar="SERIAL",
+                      help="Серийный номер БНСО (из реестра BNSO_REGISTRY)")
 
     parser.add_argument("--minor", type=str,
                         help="Minor из принятого пакета (hex, например: C1B2)")
+    parser.add_argument("--bnso-id", type=int, metavar="ID",
+                        help="ID метки из телематики БНСО (десятичное целое)")
     parser.add_argument("--tag-id", type=int,
                         help="TAG_ID для симуляции")
 
@@ -214,26 +305,50 @@ def main():
         print(f"  Minor:     0x{minor:04X} ({minor})")
         print(f"  MAC sfx:   {mac_suffix[0]:02X}:{mac_suffix[1]:02X}:{mac_suffix[2]:02X}")
 
-    else:
+    elif args.major:
         if args.minor is None:
             print("Ошибка: --minor обязателен вместе с --major", file=sys.stderr)
             return 1
 
         major = int(args.major, 16)
         minor = int(args.minor, 16)
-
         result = identify_tag(major, minor, key, args.num_tags, unix_time)
+        _print_result(result, SLOT_DURATION)
 
-        if result:
-            slot_ts = result["slot"] * SLOT_DURATION
-            slot_str = datetime.datetime.utcfromtimestamp(slot_ts).strftime("%Y-%m-%d %H:%M:%S UTC")
-            print(f"  Tag ID:    {result['tag_id']}")
-            print(f"  Slot:      {result['slot']} ({slot_str})")
+    else:  # --bnso-serial
+        if args.bnso_id is None:
+            print("Ошибка: --bnso-id обязателен вместе с --bnso-serial", file=sys.stderr)
+            return 1
+
+        try:
+            model, major, minor, id_sum = bnso_decode(args.bnso_serial, args.bnso_id)
+        except ValueError as e:
+            print(f"Ошибка: {e}", file=sys.stderr)
+            return 1
+
+        if model == 'умка':
+            print(f"  БНСО:      {args.bnso_serial} (Умка, Wialon IPS)")
+            print(f"  Decoded:   Major=0x{major:04X} ({major}), Minor=0x{minor:04X} ({minor})")
+            result = identify_tag(major, minor, key, args.num_tags, unix_time)
         else:
-            print("  Метка не найдена")
-            return 2
+            print(f"  БНСО:      {args.bnso_serial} (Скаут, EGTS)")
+            print(f"  Decoded:   Major+Minor sum = {id_sum}")
+            result = identify_tag_by_sum(id_sum, key, args.num_tags, unix_time)
+
+        _print_result(result, SLOT_DURATION)
 
     return 0
+
+
+def _print_result(result: dict | None, slot_duration: int):
+    if result:
+        slot_ts = result["slot"] * slot_duration
+        slot_str = datetime.datetime.utcfromtimestamp(slot_ts).strftime("%Y-%m-%d %H:%M:%S UTC")
+        print(f"  Tag ID:    {result['tag_id']}")
+        print(f"  Slot:      {result['slot']} ({slot_str})")
+    else:
+        print("  Метка не найдена")
+        return 2
 
 
 if __name__ == "__main__":

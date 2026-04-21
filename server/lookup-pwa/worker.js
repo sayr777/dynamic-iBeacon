@@ -41,6 +41,41 @@ async function aesECB(block) {
   return new Uint8Array(ct, 0, 16); // берём только первый блок
 }
 
+// Поиск TagID по сумме Major+Minor (протокол Скаут: ID = Major + Minor)
+async function searchBySum({ keyHex, idSum, tagMin, tagMax, slotMin, slotMax }) {
+  const keyBytes = new Uint8Array(keyHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+  await importKey(keyBytes);
+
+  const total = (tagMax - tagMin + 1) * (slotMax - slotMin + 1);
+  let checked = 0;
+  let lastReport = Date.now();
+
+  for (let tagID = tagMin; tagID <= tagMax; tagID++) {
+    for (let slot = slotMin; slot <= slotMax; slot++) {
+      const advOut = await aesECB(buildBlock(tagID, slot, 1));
+      const m = (advOut[0] << 8) | advOut[1];
+      const n = (advOut[2] << 8) | advOut[3];
+
+      if (m + n === idSum) {
+        const mac = [
+          advOut[4] | 0xC0, advOut[5], advOut[6], advOut[7], advOut[8], advOut[9]
+        ].map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(':');
+        self.postMessage({ type: 'found', tagID, slot, mac, checked });
+        return;
+      }
+
+      checked++;
+      const now = Date.now();
+      if (now - lastReport > 200) {
+        self.postMessage({ type: 'progress', checked, total });
+        lastReport = now;
+      }
+    }
+  }
+
+  self.postMessage({ type: 'notfound', checked });
+}
+
 // Поиск TagID по тройке (UUID, Major, Minor)
 // uuid — строка hex 32 символа без дефисов (опционально)
 // При наличии UUID: сначала проверяем UUID (variant=0), затем Major/Minor (variant=1)
@@ -109,7 +144,11 @@ async function search({ keyHex, uuid, major, minor, tagMin, tagMax, slotMin, slo
 
 self.onmessage = async (e) => {
   try {
-    await search(e.data);
+    if (e.data.mode === 'sum') {
+      await searchBySum(e.data);
+    } else {
+      await search(e.data);
+    }
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message });
   }
