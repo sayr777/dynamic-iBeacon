@@ -633,6 +633,12 @@ function onBnsoInput() {
     return;
   }
 
+  // Если слот-хинт не задан — подставляем текущий production-слот (unix/300)
+  const slotHintEl = document.getElementById('l-slot-hint');
+  if (!slotHintEl.value) {
+    slotHintEl.value = Math.floor(Date.now() / 1000 / 300);
+  }
+
   if (model === 'умка') {
     const major = (rawId >>> 16) & 0xFFFF;
     const minor = rawId & 0xFFFF;
