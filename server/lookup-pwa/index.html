@@ -802,6 +802,26 @@ function onMajorMinorInput(el, _field) {
   scheduleAutoSearch();
 }
 
+// Время начала слота.
+// mode: 'prod' → slot*300 = unix_time → реальный UTC
+//       'proto'→ slot*10  = uptime в секундах
+// Если mode не задан — автоопределение: slot>50000 = prod
+function slotTimestamp(slot, mode) {
+  const isProd = mode === 'prod' || (mode == null && slot > 50000);
+  if (isProd) {
+    const ts = slot * 300;
+    const d = new Date(ts * 1000);
+    return d.toLocaleString('ru-RU', { timeZone: 'UTC',
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit' }) + ' UTC';
+  }
+  const sec = slot * 10;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `аптайм ${h > 0 ? h + ' ч ' : ''}${m} мин ${s} с`;
+}
+
 function scheduleAutoSearch() {
   clearTimeout(lDebounce);
   // Скрыть старый результат
@@ -897,6 +917,7 @@ function showLFound(d, ms) {
     ? `<div class="stop-name">📍 ${name}</div>`
     : `<div class="stop-name" style="color:var(--muted)">— остановка не в справочнике —</div>`;
 
+  const slotTimeHtml = slotTimestamp(d.slot);
   document.getElementById('l-rbody').innerHTML = `
     <div class="tagid-line">
       <div class="tagid-num">${d.tagID}</div>
@@ -905,6 +926,7 @@ function showLFound(d, ms) {
     <div class="result-details">
       <div class="rk">MAC</div><div class="rv">${d.mac}</div>
       <div class="rk">Слот</div><div class="rv">${d.slot}</div>
+      <div class="rk">Слот начало</div><div class="rv">${slotTimeHtml}</div>
       <div class="rk">Проверено</div><div class="rv">${d.checked.toLocaleString('ru')}</div>
       <div class="rk">Время</div><div class="rv">${ms} мс</div>
     </div>`;
@@ -1126,7 +1148,7 @@ function renderDevices() {
         ${d.stopName?`<span>📍 ${d.stopName}</span>`:''}
         ${d.major!=null?`<span>M:${majorH} m:${minorH}</span>`:''}
         ${d.mac?`<span>${d.mac}</span>`:''}
-        ${d.slot!=null?`<span>slot ${d.slot}</span>`:''}
+        ${d.slot!=null?`<span>slot ${d.slot} · 🕐 ${slotTimestamp(d.slot, document.getElementById('s-mode').value)}</span>`:''}
       </div>`;
     if (isNew) list.prepend(card);
   });

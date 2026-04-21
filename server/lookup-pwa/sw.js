@@ -1,5 +1,5 @@
 // Service Worker — кэширует всё для работы офлайн
-const CACHE = 'ble-lookup-v16';
+const CACHE = 'ble-lookup-v17';
 const ASSETS = ['./', './index.html', './worker.js', './manifest.json'];
 
 self.addEventListener('install', e => {
