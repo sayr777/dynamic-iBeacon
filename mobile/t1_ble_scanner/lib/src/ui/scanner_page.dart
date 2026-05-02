@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../models/beacon_view_model.dart';
 import '../services/ble_scanner_controller.dart';
@@ -22,7 +22,7 @@ class _ScannerPageState extends State<ScannerPage> {
   late final TextEditingController _prodWindowController;
   late final TextEditingController _protoSlotMaxController;
   T1ScanMode _scanMode = T1ScanMode.production;
-  StreamSubscription<BleStatus>? _bleStatusSub;
+  StreamSubscription<BluetoothAdapterState>? _bleStatusSub;
 
   @override
   void initState() {
@@ -35,8 +35,8 @@ class _ScannerPageState extends State<ScannerPage> {
     _controller.initialize();
 
     // Когда Bluetooth включается — автоматически закрываем диалог
-    _bleStatusSub = _controller.bleStatusStream.listen((status) {
-      if (status == BleStatus.ready && mounted) {
+    _bleStatusSub = _controller.bleAdapterStateStream.listen((state) {
+      if (state == BluetoothAdapterState.on && mounted) {
         Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
       }
     });
@@ -103,9 +103,9 @@ class _ScannerPageState extends State<ScannerPage> {
     }
 
     // Проверить статус Bluetooth перед запуском
-    if (_controller.bleStatus != BleStatus.ready) {
+    if (_controller.bleAdapterState != BluetoothAdapterState.on) {
       await _requestBluetooth();
-      if (_controller.bleStatus != BleStatus.ready) return;
+      if (_controller.bleAdapterState != BluetoothAdapterState.on) return;
     }
 
     final settings = T1LookupSettings(
