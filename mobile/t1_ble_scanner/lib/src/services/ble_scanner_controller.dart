@@ -34,6 +34,8 @@ class BleScannerController extends ChangeNotifier {
   String get status => _status;
   String? get error => _error;
   AppConfig? get config => _config;
+  BleStatus get bleStatus => _ble.status;
+  Stream<BleStatus> get bleStatusStream => _ble.statusStream;
   T1LookupSettings? get activeSettings => _activeSettings;
   List<BeaconViewModel> get devices => _devices.values.toList(growable: false)
     ..sort((a, b) {
