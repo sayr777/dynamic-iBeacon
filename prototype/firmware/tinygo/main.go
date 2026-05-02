@@ -311,19 +311,23 @@ func main() {
 	// Задержка чтобы монитор успел подключиться до первых сообщений
 	time.Sleep(2 * time.Second)
 
-	// BLE Privacy: MAC меняется автоматически каждый слот (Non-Resolvable Private Address).
-	// Вызывается после Enable(), до первого adv.Start().
+	// BLE Privacy: временно отключено для отладки видимости в Android.
+	// В production — включить enableBLEPrivacy(uint16(cfg.SlotDuration.Seconds()))
 	privacyOK := false
-	if err := enableBLEPrivacy(uint16(cfg.SlotDuration.Seconds())); err != nil {
-		fmt.Printf("[privacy] ОШИБКА %s\n", err)
-	} else {
-		privacyOK = true
-		fmt.Println("[privacy] OK — Radio MAC меняется каждый слот")
-	}
+	fmt.Println("[privacy] ОТКЛЮЧЕНО — фиксированный RadioMAC (режим отладки)")
 
+	// Получить и напечатать RadioMAC (адрес BLE-радио)
+	radioAddr, addrErr := adapter.Address()
 	fmt.Println("========================================")
 	fmt.Printf("BLE Tag  TagID=%-5d  SlotDuration=%s\n", cfg.TagID, cfg.SlotDuration)
 	fmt.Printf("Operator UUID=%s\n", uuidString(cfg.OperatorUUID))
+	if addrErr == nil {
+		mac := radioAddr.MAC
+		fmt.Printf("RadioMAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			mac[5], mac[4], mac[3], mac[2], mac[1], mac[0])
+	} else {
+		fmt.Println("RadioMAC: недоступен")
+	}
 	if privacyOK {
 		fmt.Println("UUID статичен для оператора; Major + Minor + MAC + RadioMAC динамические")
 	} else {
@@ -357,9 +361,16 @@ func main() {
 				fmt.Println("========================================")
 				firstSlot = false
 			}
-			fmt.Printf("[slot %4d] TagID=%d  Major=0x%04X  Minor=0x%04X  MAC=%s\n",
+			// Печатать RadioMAC каждый слот, чтобы не пропустить при подключении монитора
+			radioSlotAddr, radioSlotErr := adapter.Address()
+			radioMACStr := "недоступен"
+			if radioSlotErr == nil {
+				rm := radioSlotAddr.MAC
+				radioMACStr = fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", rm[5], rm[4], rm[3], rm[2], rm[1], rm[0])
+			}
+			fmt.Printf("[slot %4d] TagID=%d  Major=0x%04X  Minor=0x%04X  DerivedMAC=%s\n",
 				slot, cfg.TagID, major, minor, macString(mac))
-			fmt.Printf("           UUID=%s\n", uuidString(cfg.OperatorUUID))
+			fmt.Printf("           UUID=%s  RadioMAC=%s\n", uuidString(cfg.OperatorUUID), radioMACStr)
 			updateAdvertisement(adv, cfg, slot)
 			lastSlot = slot
 		}
