@@ -1,0 +1,20 @@
+{
+  "local": {
+    "name": "ours",
+    "uuid": "FDA50693-A4E2-4FB1-AFCF-C6EB07647825"
+  },
+  "external": [
+    {
+      "name": "yandex",
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "lookup_url": "https://example.yandex.local/api/v1/ibeacon/resolve",
+      "method": "POST"
+    },
+    {
+      "name": "rtelecom",
+      "uuid": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "lookup_url": "https://example.rtelecom.local/api/v1/ibeacon/resolve",
+      "method": "POST"
+    }
+  ]
+}

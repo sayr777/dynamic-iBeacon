@@ -1,0 +1,36 @@
+{
+  "local": {
+    "name": "T1",
+    "code": "T1",
+    "uuid": "FDA50693-A4E2-4FB1-AFCF-C6EB07647825"
+  },
+  "external": [
+    {
+      "name": "Yandex",
+      "code": "YANDEX",
+      "uuid": "11111111-2222-3333-4444-555555555555"
+    },
+    {
+      "name": "RTelecom",
+      "code": "RTELECOM",
+      "uuid": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+    }
+  ],
+  "stops": {
+    "0": "Депо / Парк отстоя",
+    "1": "Центральный автовокзал",
+    "2": "Площадь Революции",
+    "10": "Проспект Мира, д. 5",
+    "20": "Больница №1",
+    "42": "ул. Ленина, дом 1",
+    "43": "ул. Ленина, дом 35",
+    "50": "Парк Победы",
+    "99": "Конечная остановка"
+  },
+  "defaults": {
+    "keyHex": "2B7E151628AED2A6ABF7158809CF4F3C",
+    "tagMax": 100,
+    "productionSlotWindow": 5,
+    "prototypeSlotMax": 1000
+  }
+}
