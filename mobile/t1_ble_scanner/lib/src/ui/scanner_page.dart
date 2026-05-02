@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 import '../models/beacon_view_model.dart';
 import '../services/ble_scanner_controller.dart';
@@ -19,6 +22,7 @@ class _ScannerPageState extends State<ScannerPage> {
   late final TextEditingController _prodWindowController;
   late final TextEditingController _protoSlotMaxController;
   T1ScanMode _scanMode = T1ScanMode.production;
+  StreamSubscription<BleStatus>? _bleStatusSub;
 
   @override
   void initState() {
@@ -29,6 +33,13 @@ class _ScannerPageState extends State<ScannerPage> {
     _prodWindowController = TextEditingController();
     _protoSlotMaxController = TextEditingController();
     _controller.initialize();
+
+    // Когда Bluetooth включается — автоматически закрываем диалог
+    _bleStatusSub = _controller.bleStatusStream.listen((status) {
+      if (status == BleStatus.ready && mounted) {
+        Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
+      }
+    });
   }
 
   void _onControllerChanged() {
@@ -44,6 +55,7 @@ class _ScannerPageState extends State<ScannerPage> {
 
   @override
   void dispose() {
+    _bleStatusSub?.cancel();
     _controller.removeListener(_onControllerChanged);
     _controller.dispose();
     _keyController.dispose();
@@ -53,10 +65,47 @@ class _ScannerPageState extends State<ScannerPage> {
     super.dispose();
   }
 
+  Future<void> _requestBluetooth() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.bluetooth_disabled, color: Colors.orangeAccent),
+            SizedBox(width: 10),
+            Text('Bluetooth выключен'),
+          ],
+        ),
+        content: const Text(
+          'Для сканирования BLE-меток необходимо включить Bluetooth.\n\n'
+          'Включите Bluetooth на устройстве и нажмите «Повторить».',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Отмена'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(),
+            icon: const Icon(Icons.bluetooth),
+            label: const Text('Повторить'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _toggleScan() async {
     if (_controller.scanning) {
       await _controller.stopScan();
       return;
+    }
+
+    // Проверить статус Bluetooth перед запуском
+    if (_controller.bleStatus != BleStatus.ready) {
+      await _requestBluetooth();
+      if (_controller.bleStatus != BleStatus.ready) return;
     }
 
     final settings = T1LookupSettings(
