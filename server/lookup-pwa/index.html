@@ -184,10 +184,13 @@
     .device-card { background: var(--surface2); border: 1px solid var(--border);
       border-radius: 10px; padding: 12px 14px;
       display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; transition: .3s; }
-    .device-card.ours { border-color: var(--green); background: var(--green-bg); }
+    .device-card.ibeacon { border-color: #24476f; }
+    .device-card.foreign { border-color: #7c5a12; background: #4a341008; }
+    .device-card.t1 { border-color: var(--green); background: var(--green-bg); }
+    .device-card.unresolved { border-color: var(--yellow); }
     .device-card.fading { opacity: .5; }
     .dev-name  { font-weight: 600; font-size: .9rem;
-      display: flex; align-items: center; gap: 6px; }
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .dev-mac   { font-family: var(--mono); font-size: .78rem; color: var(--muted); }
     .dev-rssi  { grid-column: 2; grid-row: 1/3;
       display: flex; align-items: center; justify-content: flex-end; }
@@ -206,6 +209,13 @@
       border-radius: 6px; padding: 1px 8px; font-family: var(--mono); }
     .tag-id-badge.loading { color: var(--yellow); border-color: var(--yellow);
       background: #78350f30; animation: blink .8s ease-in-out infinite; }
+    .badge-chip { display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+      background: #161927; color: var(--muted); font-size: .72rem;
+      font-weight: 700; line-height: 1.2; }
+    .badge-chip.info { color: var(--accent2); border-color: #325688; background: #10233f40; }
+    .badge-chip.warn { color: var(--yellow); border-color: #8b6a11; background: #4a341020; }
+    .badge-chip.good { color: var(--green); border-color: var(--green); background: #14532d30; }
     @keyframes blink { 50%{ opacity:.4; } }
     .empty-hint { color: var(--muted); font-size: .85rem;
       text-align: center; padding: 20px 0; }
@@ -332,7 +342,7 @@
     </div>
     <div id="l-stops-body" style="display:none">
       <div id="l-stops-table" style="display:flex;flex-direction:column;gap:6px"></div>
-      <p class="hint">Справочник встроен в приложение. TagID ↔ название остановки.</p>
+      <p class="hint" id="l-stops-hint">Справочник встроен в приложение. Номер остановки ↔ название.</p>
     </div>
   </div>
 
@@ -362,7 +372,7 @@
       </div>
 
       <div class="algo-block">
-        <h3>Схема v2 — два вызова AES на слот</h3>
+        <h3>Один AES-вызов на слот</h3>
         <p>Входной блок (16 байт) для каждого из двух вызовов:</p>
         <pre>
  байт  поле       значение
@@ -382,12 +392,11 @@
       <div class="algo-block">
         <h3>Вывод AES и поля iBeacon</h3>
         <pre>
- <span class="hl">variant = 0x00  →  UUID</span>
- AES(KEY, block0)[0..15] → UUID [16 байт]
- Передаётся в поле Proximity UUID пакета iBeacon.
+ <span class="hl">UUID оператора</span>
+ UUID задаётся в конфигурации и одинаков у всех наших меток.
 
- <span class="hl">variant = 0x01  →  Major + Minor + MAC</span>
- out = AES(KEY, block1)
+ <span class="hl">AES(KEY, block) → Major + Minor + MAC</span>
+ out = AES(KEY, block)
  Major = (out[0] &lt;&lt; 8) | out[1]          ← 16 бит
  Minor = (out[2] &lt;&lt; 8) | out[3]          ← 16 бит
  MAC[0] = out[4] | 0xC0                  ← биты 46-47 = 11 (BLE Random Static)
@@ -430,7 +439,7 @@ for s in [slot_now-1, slot_now, slot_now+1]:
         <h3>Свойства безопасности</h3>
         <p><b style="color:var(--text)">Неотслеживаемость:</b> без ключа
           наблюдатель не может связать пакеты одной метки между слотами —
-          UUID, Major, Minor, MAC и RadioMAC меняются каждые 5 мин.</p>
+          UUID статичен на уровне оператора, а Major, Minor, MAC и RadioMAC меняются каждые 5 мин.</p>
         <p><b style="color:var(--text)">Стойкость:</b> инвертировать
           AES-128 без знания KEY — вычислительно неосуществимо при текущем
           уровне техники (2<sup>128</sup> операций перебора).</p>
@@ -451,9 +460,9 @@ for s in [slot_now-1, slot_now, slot_now+1]:
 <div class="panel" id="panel-scanner">
 
   <div class="card">
-    <div class="card-title">⚙️ Настройки сканера</div>
+    <div class="card-title">⚙️ Настройки BLE-сканера</div>
     <div class="field">
-      <label>AES-128 ключ (KEY)</label>
+      <label>AES-128 ключ T1 (для дешифровки остановок)</label>
       <div class="key-row">
         <input id="s-key" value="2B7E151628AED2A6ABF7158809CF4F3C"
           maxlength="32" autocomplete="off" spellcheck="false">
@@ -463,7 +472,7 @@ for s in [slot_now-1, slot_now, slot_now+1]:
     </div>
     <div class="row">
       <div class="field">
-        <label>Режим слотов</label>
+        <label>Режим слотов для T1</label>
         <select id="s-mode" onchange="onScanModeChange()">
           <option value="proto">Прототип (0..N, uptime/10с)</option>
           <option value="prod">Production (unix/300с ±)</option>
@@ -487,6 +496,7 @@ for s in [slot_now-1, slot_now, slot_now+1]:
           oninput="updateScanTableSize()"></div>
     </div>
     <p class="hint" id="s-table-size"></p>
+    <p class="hint" id="s-config-hint"></p>
     <button class="btn-primary" id="s-btn" onclick="toggleScan()">
       📶 Начать сканирование
     </button>
@@ -508,8 +518,9 @@ for s in [slot_now-1, slot_now, slot_now+1]:
       </div>
       <button class="btn-sm" onclick="clearDevices()">очистить</button>
     </div>
+    <p class="hint" id="s-summary">Пока пусто.</p>
     <div class="scanner-list" id="s-list">
-      <div class="empty-hint" id="s-empty">Устройств пока нет. Запустите сканирование.</div>
+      <div class="empty-hint" id="s-empty">Пакетов пока нет. Запустите сканирование.</div>
     </div>
   </div>
 
@@ -565,36 +576,138 @@ if ('serviceWorker' in navigator)
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
 
 // ══════════════════════════════════════════════════════
-// Справочник остановок: TagID → название
+// Конфигурация приложения
 // ══════════════════════════════════════════════════════
-const STOPS = {
-  0:  'Депо / Парк отстоя',
-  1:  'Центральный автовокзал',
-  2:  'Площадь Революции',
-  10: 'Проспект Мира, д. 5',
-  20: 'Больница №1',
-  42: 'ул. Ленина, дом 1',
-  43: 'ул. Ленина, дом 35',
-  50: 'Парк Победы',
-  99: 'Конечная остановка',
+const CONFIG_PATH = './config.json';
+const DEFAULT_APP_CONFIG = {
+  local: {
+    name: 'T1',
+    code: 'T1',
+    uuid: 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825'
+  },
+  external: [
+    {
+      name: 'Yandex',
+      code: 'YANDEX',
+      uuid: '11111111-2222-3333-4444-555555555555'
+    },
+    {
+      name: 'RTelecom',
+      code: 'RTELECOM',
+      uuid: 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE'
+    }
+  ],
+  stops: {
+    0:  'Депо / Парк отстоя',
+    1:  'Центральный автовокзал',
+    2:  'Площадь Революции',
+    10: 'Проспект Мира, д. 5',
+    20: 'Больница №1',
+    42: 'ул. Ленина, дом 1',
+    43: 'ул. Ленина, дом 35',
+    50: 'Парк Победы',
+    99: 'Конечная остановка'
+  }
 };
 
-function stopName(tagID) {
-  return STOPS[tagID] || null;
+let appConfig = JSON.parse(JSON.stringify(DEFAULT_APP_CONFIG));
+let STOPS = { ...DEFAULT_APP_CONFIG.stops };
+let LOCAL_OPERATOR = { ...DEFAULT_APP_CONFIG.local };
+let OPERATOR_BY_UUID = new Map();
+
+function normalizeUuid(uuid) {
+  return (uuid || '').toString().replace(/[^0-9a-f]/gi, '').toLowerCase();
 }
 
-// Отрисовка справочника
+function formatUuid(uuid) {
+  const compact = normalizeUuid(uuid);
+  if (compact.length !== 32) return uuid || '—';
+  return `${compact.slice(0,8)}-${compact.slice(8,12)}-${compact.slice(12,16)}-${compact.slice(16,20)}-${compact.slice(20)}`.toUpperCase();
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function rebuildOperatorIndex() {
+  OPERATOR_BY_UUID = new Map();
+  const localUuid = normalizeUuid(LOCAL_OPERATOR.uuid);
+  if (localUuid) {
+    OPERATOR_BY_UUID.set(localUuid, {
+      ...LOCAL_OPERATOR,
+      uuid: localUuid,
+      scope: 'local'
+    });
+  }
+  for (const item of appConfig.external || []) {
+    const uuid = normalizeUuid(item.uuid);
+    if (!uuid) continue;
+    OPERATOR_BY_UUID.set(uuid, {
+      ...item,
+      uuid,
+      scope: 'external'
+    });
+  }
+}
+
+function stopName(tagID) {
+  const key = String(tagID);
+  return STOPS[key] || STOPS[tagID] || null;
+}
+
 function renderStopDirectory() {
   const el = document.getElementById('l-stops-table');
-  const entries = Object.entries(STOPS);
+  const entries = Object.entries(STOPS).sort((a, b) => Number(a[0]) - Number(b[0]));
+  if (!entries.length) {
+    el.innerHTML = '<div class="hint">Справочник остановок пуст.</div>';
+    return;
+  }
   el.innerHTML = entries.map(([id, name]) => `
     <div style="display:grid;grid-template-columns:54px 1fr;gap:4px 10px;
       font-size:.83rem;align-items:baseline">
-      <span style="font-family:var(--mono);color:var(--accent2);font-weight:700">#${id}</span>
-      <span style="color:var(--text)">${name}</span>
+      <span style="font-family:var(--mono);color:var(--accent2);font-weight:700">#${escapeHtml(id)}</span>
+      <span style="color:var(--text)">${escapeHtml(name)}</span>
     </div>`).join('');
 }
-renderStopDirectory();
+
+function renderConfigHints(source = 'Встроенная конфигурация') {
+  const localCode = escapeHtml(LOCAL_OPERATOR.code || LOCAL_OPERATOR.name || 'T1');
+  const localUuid = escapeHtml(formatUuid(LOCAL_OPERATOR.uuid));
+  const stopsCount = Object.keys(STOPS).length.toLocaleString('ru');
+  document.getElementById('l-stops-hint').textContent =
+    `${source}. Справочник: ${stopsCount} остановок.`;
+  document.getElementById('s-config-hint').textContent =
+    `T1 UUID: ${localUuid} · источник: ${source}`;
+}
+
+function applyAppConfig(config, sourceLabel) {
+  appConfig = {
+    local: { ...DEFAULT_APP_CONFIG.local, ...(config?.local || {}) },
+    external: Array.isArray(config?.external) ? config.external : DEFAULT_APP_CONFIG.external,
+    stops: { ...DEFAULT_APP_CONFIG.stops, ...(config?.stops || {}) }
+  };
+  LOCAL_OPERATOR = { ...appConfig.local };
+  STOPS = { ...appConfig.stops };
+  rebuildOperatorIndex();
+  renderStopDirectory();
+  renderConfigHints(sourceLabel);
+}
+
+async function loadAppConfig() {
+  try {
+    const response = await fetch(CONFIG_PATH, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const json = await response.json();
+    applyAppConfig(json, 'config.json');
+  } catch (_error) {
+    applyAppConfig(DEFAULT_APP_CONFIG, 'встроенная конфигурация');
+  }
+}
 
 function toggleStops() {
   const body = document.getElementById('l-stops-body');
@@ -732,6 +845,10 @@ function switchTab(name) {
 // ══════════════════════════════════════════════════════
 const TEST_KEY = '2B7E151628AED2A6ABF7158809CF4F3C';
 
+function getLocalOperatorUuid() {
+  return normalizeUuid(LOCAL_OPERATOR.uuid);
+}
+
 function fillTestKey(id) {
   // id может быть 'l-key' (lookup) или 's-key' (scanner)
   // По умолчанию — оба поля
@@ -745,7 +862,7 @@ function fillTestKey(id) {
     scheduleAutoSearch();
   }
   const hint = document.getElementById('l-key-hint');
-  if (hint) hint.textContent = 'Заполнен ключом прототипа (TagID=42, KEY из main.go)';
+  if (hint) hint.textContent = 'Заполнен тестовым ключом T1 (TagID=42, KEY из прототипа)';
 }
 
 function onKeyInput(el) {
@@ -775,12 +892,11 @@ async function aesECB(cryptoKey, block16) {
   return new Uint8Array(out, 0, 16);
 }
 
-function buildBlock(tagID, slot, variant) {
+function buildBlock(tagID, slot) {
   const b = new Uint8Array(16);
   b[0]=(tagID>>8)&0xFF; b[1]=tagID&0xFF;
   b[2]=(slot>>24)&0xFF; b[3]=(slot>>16)&0xFF;
   b[4]=(slot>> 8)&0xFF; b[5]= slot     &0xFF;
-  b[6]=(variant||0)&0xFF;
   return b;
 }
 
@@ -914,11 +1030,11 @@ async function runAutoSearch() {
 function showLFound(d, ms) {
   const el   = document.getElementById('l-result');
   el.className = 'result visible found';
-  document.getElementById('l-rhead').innerHTML = '✅ Метка идентифицирована';
+  document.getElementById('l-rhead').innerHTML = '✅ Остановка T1 распознана';
 
   const name = stopName(d.tagID);
   const nameHtml = name
-    ? `<div class="stop-name">📍 ${name}</div>`
+    ? `<div class="stop-name">📍 ${escapeHtml(name)}</div>`
     : `<div class="stop-name" style="color:var(--muted)">— остановка не в справочнике —</div>`;
 
   const slotTimeHtml = slotTimestamp(d.slot);
@@ -928,9 +1044,10 @@ function showLFound(d, ms) {
       ${nameHtml}
     </div>
     <div class="result-details">
-      <div class="rk">MAC</div><div class="rv">${d.mac}</div>
-      <div class="rk">Слот</div><div class="rv">${d.slot}</div>
-      <div class="rk">Слот начало</div><div class="rv">${slotTimeHtml}</div>
+      <div class="rk">Тип</div><div class="rv">${escapeHtml(LOCAL_OPERATOR.code || LOCAL_OPERATOR.name || 'T1')}</div>
+      <div class="rk">MAC</div><div class="rv">${escapeHtml(d.mac)}</div>
+      <div class="rk">Слот</div><div class="rv">${escapeHtml(d.slot)}</div>
+      <div class="rk">Слот начало</div><div class="rv">${escapeHtml(slotTimeHtml)}</div>
       <div class="rk">Проверено</div><div class="rv">${d.checked.toLocaleString('ru')}</div>
       <div class="rk">Время</div><div class="rv">${ms} мс</div>
     </div>`;
@@ -1007,13 +1124,11 @@ async function buildScanTable() {
   let done = 0;
   for (let tagID=0; tagID<=tMax; tagID++) {
     for (let slot=sMin; slot<=sMax; slot++) {
-      const uuidOut = await aesECB(ck, buildBlock(tagID,slot,0));
-      const advOut  = await aesECB(ck, buildBlock(tagID,slot,1));
-      const uuidHex = [...uuidOut].map(b=>b.toString(16).padStart(2,'0')).join('');
-      const major   = (advOut[0]<<8)|advOut[1];
-      const minor   = (advOut[2]<<8)|advOut[3];
-      const mac     = deriveMAC(advOut);
-      table.set(uuidHex, {tagID, slot, major, minor, mac});
+      const advOut = await aesECB(ck, buildBlock(tagID,slot));
+      const major  = (advOut[0]<<8)|advOut[1];
+      const minor  = (advOut[2]<<8)|advOut[3];
+      const mac    = deriveMAC(advOut);
+      table.set(`${major}:${minor}`, {tagID, slot, major, minor, mac});
       done++;
     }
     if (tagID%5===4) {
@@ -1102,8 +1217,8 @@ function onAdv(event) {
   if (ib) {
     entry.major=ib.major; entry.minor=ib.minor; entry.uuid=ib.uuid;
     if (scanTable.size>0) {
-      const m=scanTable.get(ib.uuid);
-      if (m&&m.major===ib.major&&m.minor===ib.minor) {
+      const m=(ib.uuid===OUR_OPERATOR_UUID) ? scanTable.get(`${ib.major}:${ib.minor}`) : null;
+      if (m) {
         entry.ours=true; entry.tagID=m.tagID; entry.slot=m.slot; entry.mac=m.mac;
         entry.stopName=stopName(m.tagID);
       } else if (!entry.ours) entry.ours=false;
@@ -1170,9 +1285,7 @@ async function simulateScan() {
   const simTagID=Math.min(42,tMax);
   const mode=document.getElementById('s-mode').value;
   const simSlot=mode==='prod'?Math.floor(Date.now()/1000/300):Math.max(sMin,Math.min(sMax,sMin+2));
-  const uuidOut=await aesECB(ck,buildBlock(simTagID,simSlot,0));
-  const advOut =await aesECB(ck,buildBlock(simTagID,simSlot,1));
-  const uuidHex=[...uuidOut].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const advOut =await aesECB(ck,buildBlock(simTagID,simSlot));
   const major=(advOut[0]<<8)|advOut[1];
   const minor=(advOut[2]<<8)|advOut[3];
   for (let i=0;i<3;i++) {
@@ -1182,11 +1295,11 @@ async function simulateScan() {
     devices.set(`ib:${fu}:${fmaj}:${fmin}`,
       {name:`Unknown BLE ${i+1}`,rssi:-70-i*5,uuid:fu,major:fmaj,minor:fmin,ours:false,ts:Date.now()});
   }
-  const match=scanTable.get(uuidHex);
-  devices.set(`ib:${uuidHex}:${major}:${minor}`, {
+  const match=scanTable.get(`${major}:${minor}`);
+  devices.set(`ib:${OUR_OPERATOR_UUID}:${major}:${minor}`, {
     name:`BLE Tag (ID=${simTagID})`, rssi:-55,
-    uuid:uuidHex, major, minor, ts:Date.now(),
-    ours:!!(match&&match.major===major&&match.minor===minor),
+    uuid:OUR_OPERATOR_UUID, major, minor, ts:Date.now(),
+    ours:!!match,
     tagID:match?.tagID, slot:match?.slot,
     mac:match?deriveMAC(advOut):undefined,
     stopName:match?stopName(match.tagID):null
