@@ -1,0 +1,166 @@
+openapi: 3.0.0
+info:
+  title: Partner Billing API
+  version: 1.0.0
+  description: Partner-facing billing, quota and client management API.
+servers:
+  - url: https://api.t1-location.ru
+tags:
+  - name: partner
+  - name: billing
+  - name: webhooks
+paths:
+  /v1/partner/account:
+    get:
+      tags: [partner]
+      summary: Get partner account profile
+      operationId: getPartnerAccount
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Partner profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInfo'
+  /v1/partner/clients:
+    get:
+      tags: [partner]
+      summary: List partner client ids
+      operationId: listClients
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Client list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientEntry'
+    post:
+      tags: [partner]
+      summary: Create client id
+      operationId: createClient
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: Client created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientEntry'
+  /v1/billing/usage:
+    get:
+      tags: [billing]
+      summary: Get usage report
+      operationId: getUsageReport
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [current_month, last_7d, custom]
+      responses:
+        '200':
+          description: Usage report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageReport'
+  /v1/billing/webhooks:
+    post:
+      tags: [webhooks]
+      summary: Register billing webhook
+      operationId: registerWebhook
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRegistration'
+      responses:
+        '201':
+          description: Webhook registered
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    AccountInfo:
+      type: object
+      properties:
+        partner_id:
+          type: string
+        legal_name:
+          type: string
+        tier:
+          type: string
+        status:
+          type: string
+        sla:
+          type: string
+    ClientEntry:
+      type: object
+      properties:
+        client_id:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    CreateClientRequest:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          maxLength: 64
+    UsageReport:
+      type: object
+      properties:
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        used_requests:
+          type: integer
+        tier_limit:
+          type: integer
+        overage_requests:
+          type: integer
+        estimated_cost_rub:
+          type: number
+    WebhookRegistration:
+      type: object
+      required: [url, events, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
