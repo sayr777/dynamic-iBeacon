@@ -1,0 +1,147 @@
+openapi: 3.0.0
+info:
+  title: Service Management API
+  version: 1.0.0
+  description: Administrative API for registry management, partner administration and audit access.
+servers:
+  - url: https://admin-api.t1-location.ru
+tags:
+  - name: registry
+  - name: audit
+  - name: partners
+paths:
+  /v1/admin/registry/stops:
+    get:
+      tags: [registry]
+      summary: List registry stops
+      operationId: listStops
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Stops list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StopEntry'
+    post:
+      tags: [registry]
+      summary: Create or import stop entry
+      operationId: createStop
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopEntry'
+      responses:
+        '201':
+          description: Stop created
+  /v1/admin/logs/access:
+    get:
+      tags: [audit]
+      summary: Search access logs
+      operationId: searchAccessLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: partner_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Log search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessLogPage'
+  /v1/admin/partners/{partner_id}/status:
+    patch:
+      tags: [partners]
+      summary: Update partner operational status
+      operationId: updatePartnerStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: partner_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerStatusUpdate'
+      responses:
+        '200':
+          description: Status updated
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StopEntry:
+      type: object
+      required: [stop_id, name, lat, lon]
+      properties:
+        stop_id:
+          type: string
+        name:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        region_code:
+          type: string
+        active:
+          type: boolean
+    AccessLogPage:
+      type: object
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              partner_id:
+                type: string
+              route:
+                type: string
+              status_code:
+                type: integer
+              trace_id:
+                type: string
+    PartnerStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, suspended, limited]
+        reason:
+          type: string

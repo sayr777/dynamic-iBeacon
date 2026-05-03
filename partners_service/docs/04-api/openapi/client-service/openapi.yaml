@@ -1,0 +1,119 @@
+openapi: 3.0.0
+info:
+  title: Client Service API
+  version: 1.0.0
+  description: Public API for partner client applications to refine location from BLE events.
+servers:
+  - url: https://api.t1-location.ru
+tags:
+  - name: location
+    description: Client application methods
+paths:
+  /v1/location/refine:
+    post:
+      tags: [location]
+      summary: Refine location by BLE event
+      operationId: refineLocation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefineRequest'
+      responses:
+        '200':
+          description: Refined location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefineResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid API key
+        '429':
+          description: Rate limit exceeded
+        '500':
+          description: Internal processing error
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    RefineRequest:
+      type: object
+      required:
+        - timestamp
+        - uuid
+        - major
+        - minor
+        - rssi
+        - radio_mac
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        uuid:
+          type: string
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        rssi:
+          type: integer
+          minimum: -100
+          maximum: 0
+        radio_mac:
+          type: string
+        gps_lat:
+          type: number
+          nullable: true
+        gps_lon:
+          type: number
+          nullable: true
+        gps_accuracy_m:
+          type: number
+          nullable: true
+    RefineResponse:
+      type: object
+      required:
+        - refined_lat
+        - refined_lon
+        - stop_id
+        - confidence
+      properties:
+        refined_lat:
+          type: number
+        refined_lon:
+          type: number
+        stop_id:
+          type: string
+        stop_name:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        processing_time_ms:
+          type: integer
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
