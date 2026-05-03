@@ -1,10 +1,9 @@
-# Partner Service Documentation
+# Партнёрский сервис локального позиционирования
 
-Каталог [partners_service](C:\T1_GIT\ble-tag-jdy23-dynamic\partners_service) содержит полный пакет документов по партнёрскому сервису локального позиционирования на базе BLE-инфраструктуры.
+Каталог [partners_service](C:\T1_GIT\ble-tag-jdy23-dynamic\partners_service) содержит структурированный комплект материалов по API, интеграции партнёров, биллингу, эксплуатации, коммерческой модели и юридическому сопровождению сервиса.
 
 ## Состав
 
-- [strategy.md](C:\T1_GIT\ble-tag-jdy23-dynamic\partners_service\strategy.md) — консолидированный исходный документ со стратегией, API, биллингом, финансовой моделью, юридическим блоком и материалами для пилотов.
 - [docs/README.md](C:\T1_GIT\ble-tag-jdy23-dynamic\partners_service\docs\README.md) — карта документации и дерево разделов.
 
 ## Структура документации
