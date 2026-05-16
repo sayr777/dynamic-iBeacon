@@ -18,7 +18,9 @@ class BleScannerController extends ChangeNotifier {
 
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothAdapterState>? _adapterSub;
+  StreamSubscription<bool>? _isScanningSubscription;
   Timer? _notifyDebounce;
+  Timer? _scanRestartTimer;
 
   AppConfig? _config;
   StopsRepository? _stopsRepo;
@@ -163,23 +165,47 @@ class BleScannerController extends ChangeNotifier {
       return;
     }
 
+    _resolvedT1Cache.clear();
+    _resolvingT1Keys.clear();
+    _scanning = true;
+
+    // Watch isScanning stream: if Android silently kills the scan while we
+    // still think we're scanning, restart proactively.
+    _isScanningSubscription?.cancel();
+    _isScanningSubscription = FlutterBluePlus.isScanning.listen((active) {
+      if (!active && _scanning) {
+        debugPrint('[T1] isScanning→false while _scanning=true — restarting');
+        _scheduleRestart();
+      }
+    });
+
+    await _startScanInternal();
+  }
+
+  /// Low-level: stops any existing scan/subscription, starts a new one, and
+  /// arms the 25-minute proactive-restart timer. Does NOT touch _scanning.
+  Future<void> _startScanInternal() async {
+    _scanRestartTimer?.cancel();
+    _scanRestartTimer = null;
+    _notifyDebounce?.cancel();
+
+    await FlutterBluePlus.stopScan();
+    await _scanSubscription?.cancel();
+    _scanSubscription = null;
+
     try {
-      _resolvedT1Cache.clear();
-      _resolvingT1Keys.clear();
       _status = 'Запуск BLE-сканирования...';
       notifyListeners();
 
       debugPrint('[T1] Starting BLE scan (flutter_blue_plus)...');
 
-      // flutter_blue_plus: allowDuplicates=true — получаем обновления при
-      // каждом пакете, даже если MAC не менялся.
-      // androidUsesFineLocation=true — нужно для сканирования на всех версиях Android.
+      // flutter_blue_plus: androidUsesFineLocation=true — нужно для сканирования
+      // на всех версиях Android. lowLatency — максимальная частота пакетов.
       await FlutterBluePlus.startScan(
         androidScanMode: AndroidScanMode.lowLatency,
         androidUsesFineLocation: true,
       );
 
-      _scanning = true;
       _status = 'Сканирование BLE запущено';
 
       _scanSubscription = FlutterBluePlus.scanResults.listen(
@@ -196,10 +222,26 @@ class BleScannerController extends ChangeNotifier {
           debugPrint('[T1] Scan error: $error');
           _error = error.toString();
           _status = 'Ошибка сканирования BLE';
-          _scanning = false;
-          notifyListeners();
+          if (_scanning) {
+            _scheduleRestart();
+          }
+        },
+        onDone: () {
+          // Android closed the stream — typically the 30-min OS kill.
+          debugPrint('[T1] scanResults stream closed — restarting');
+          if (_scanning) {
+            _scheduleRestart();
+          }
         },
       );
+
+      // Proactive restart every 25 min — before Android's ~30-min silent kill.
+      _scanRestartTimer = Timer(const Duration(minutes: 25), () {
+        if (_scanning) {
+          debugPrint('[T1] Proactive 25-min restart');
+          _scheduleRestart();
+        }
+      });
 
       notifyListeners();
     } on FormatException catch (error) {
@@ -215,14 +257,34 @@ class BleScannerController extends ChangeNotifier {
     }
   }
 
+  /// Restarts the scan loop after a brief pause (debounce duplicate triggers).
+  /// Guards against restart loops when _scanning has already been cleared.
+  bool _restarting = false;
+  Future<void> _scheduleRestart() async {
+    if (!_scanning || _restarting) return;
+    _restarting = true;
+    // Brief pause so the OS fully releases BLE resources before we restart.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    _restarting = false;
+    if (!_scanning) return; // user may have called stopScan during the delay
+    _status = 'Перезапуск сканирования BLE...';
+    notifyListeners();
+    await _startScanInternal();
+  }
+
   Future<void> stopScan() async {
+    _scanning = false; // set first so in-flight restart guards bail out
+    _restarting = false;
+    _scanRestartTimer?.cancel();
+    _scanRestartTimer = null;
+    _isScanningSubscription?.cancel();
+    _isScanningSubscription = null;
     _notifyDebounce?.cancel();
     await FlutterBluePlus.stopScan();
     await _scanSubscription?.cancel();
     _scanSubscription = null;
     _resolvedT1Cache.clear();
     _resolvingT1Keys.clear();
-    _scanning = false;
     _status = 'Сканирование остановлено';
     notifyListeners();
   }
@@ -477,6 +539,10 @@ class BleScannerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _scanning = false;
+    _restarting = false;
+    _scanRestartTimer?.cancel();
+    _isScanningSubscription?.cancel();
     _notifyDebounce?.cancel();
     _stopsRepo?.removeListener(_onStopsChanged);
     _operatorsRepo?.removeListener(_onOperatorsChanged);
