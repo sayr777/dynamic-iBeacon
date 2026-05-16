@@ -168,18 +168,24 @@ class BleScannerController extends ChangeNotifier {
     _resolvedT1Cache.clear();
     _resolvingT1Keys.clear();
     _scanning = true;
+    // _restarting=true suppresses the initial isScanning→false event that
+    // BehaviorSubject emits immediately on subscribe (before any scan starts),
+    // and also the false event fired by stopScan() inside _startScanInternal().
+    // It is reset to false after the scan is fully up.
+    _restarting = true;
 
     // Watch isScanning stream: if Android silently kills the scan while we
     // still think we're scanning, restart proactively.
     _isScanningSubscription?.cancel();
     _isScanningSubscription = FlutterBluePlus.isScanning.listen((active) {
-      if (!active && _scanning) {
+      if (!active && _scanning && !_restarting) {
         debugPrint('[T1] isScanning→false while _scanning=true — restarting');
         _scheduleRestart();
       }
     });
 
     await _startScanInternal();
+    _restarting = false; // now start watching for real OS-kill events
   }
 
   /// Low-level: stops any existing scan/subscription, starts a new one, and
@@ -259,17 +265,23 @@ class BleScannerController extends ChangeNotifier {
 
   /// Restarts the scan loop after a brief pause (debounce duplicate triggers).
   /// Guards against restart loops when _scanning has already been cleared.
+  /// _restarting stays true for the ENTIRE restart (delay + _startScanInternal)
+  /// so that the isScanning→false event fired by stopScan() inside
+  /// _startScanInternal() does not trigger yet another restart.
   bool _restarting = false;
   Future<void> _scheduleRestart() async {
     if (!_scanning || _restarting) return;
     _restarting = true;
-    // Brief pause so the OS fully releases BLE resources before we restart.
-    await Future<void>.delayed(const Duration(seconds: 2));
-    _restarting = false;
-    if (!_scanning) return; // user may have called stopScan during the delay
-    _status = 'Перезапуск сканирования BLE...';
-    notifyListeners();
-    await _startScanInternal();
+    try {
+      // Brief pause so the OS fully releases BLE resources before we restart.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!_scanning) return; // user may have called stopScan during the delay
+      _status = 'Перезапуск сканирования BLE...';
+      notifyListeners();
+      await _startScanInternal();
+    } finally {
+      _restarting = false;
+    }
   }
 
   Future<void> stopScan() async {
