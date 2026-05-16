@@ -73,7 +73,14 @@ flutter pub get
 flutter run -d <device_id> --release
 ```
 
-Требования: Flutter 3.x, Android 6.0+ (API 23), BLE-поддержка, разрешение `BLUETOOTH_SCAN`.
+**Проверено:** Flutter 3.41.8 · Dart 3.11.5 · `flutter analyze` — **No issues found**
+
+| Требование | Версия |
+|---|---|
+| Flutter | 3.41.8 (stable) |
+| Dart | 3.11.5 |
+| Android | 6.0+ (API 23) |
+| Разрешения | `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION` |
 
 ## Конфигурация
 
