@@ -1,40 +1,104 @@
-# T1 BLE Scanner (Flutter)
+# T1 BLE Scanner
 
-Офлайн Flutter-приложение для локального BLE-сканирования:
+Офлайн Flutter-приложение для локального сканирования BLE-меток транспортной системы T1.
 
-- распознаёт все `iBeacon` пакеты поблизости;
-- определяет оператора по статичному `UUID`;
-- для меток `T1` локально восстанавливает номер остановки по `AES-128 ECB`;
-- подставляет название остановки из локального справочника `assets/config/app_config.json`;
-- не использует сетевые вызовы и не требует подключения к Интернету.
+📄 **[Product Page (PDF)](docs/T1_BLE_Scanner_Product.pdf)**
 
-## Что внутри
+---
 
-- `lib/` — Flutter UI, BLE-сканер и локальная дешифровка `T1`
-- `assets/config/app_config.json` — локальный `UUID` T1, справочник известных операторов и остановок
-- `android/app/src/main/AndroidManifest.xml` — разрешения BLE для Android
-- `ios/Runner/Info.plist` — usage descriptions для BLE на iOS
+## Возможности
 
-## Важное ограничение текущего окружения
+| Функция | Описание |
+|---|---|
+| 🔵 **BLE-сканирование** | Обнаруживает все iBeacon-устройства в радиусе действия |
+| 🟠 **Распознавание T1** | Определяет метки T1 по UUID и запускает локальную дешифровку |
+| 🟢 **AES-128 ECB дешифровка** | Восстанавливает TagID и номер слота без сетевых вызовов |
+| 📡 **Радар-вид** | Живой радар с позиционированием по RSSI и цветовой кодировкой |
+| 📋 **Список устройств** | Детальные карточки: UUID, major/minor, derived MAC, слот, время |
+| 🛑 **Справочник остановок** | Редактируемый TagID → название, сохраняется между сессиями |
+| 🔷 **Реестр операторов** | UUID → код оператора с выбором цвета на радаре |
+| ⚙️ **Настройки** | AES-128 ключ, режим Prototype/Production, диапазон TagID |
 
-В этом рабочем окружении `Flutter SDK` не установлен, поэтому проект не был собран и не был прогнан через `flutter analyze` / `flutter run`.
+## Скриншоты
 
-Исходники приложения подготовлены, но platform runner-файлы могут потребовать стандартной генерации на машине с Flutter SDK.
+<table>
+<tr>
+<td><img src="docs/screenshots/01_radar.png" width="180"/><br><sub>Радар</sub></td>
+<td><img src="docs/screenshots/02_list.png" width="180"/><br><sub>Список устройств</sub></td>
+<td><img src="docs/screenshots/03_stops.png" width="180"/><br><sub>Справочник остановок</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/04_operators.png" width="180"/><br><sub>Операторы UUID</sub></td>
+<td><img src="docs/screenshots/05_settings.png" width="180"/><br><sub>Настройки сканирования</sub></td>
+<td><img src="docs/screenshots/06_operator_edit.png" width="180"/><br><sub>Выбор цвета оператора</sub></td>
+</tr>
+</table>
 
-## Рекомендуемый локальный запуск
+## Структура проекта
 
-1. Открыть папку `mobile/t1_ble_scanner`.
-2. На машине с установленным Flutter SDK выполнить `flutter pub get`.
-3. Если Flutter сообщит, что platform-shell не инициализирован, выполнить `flutter create .` внутри этой папки, не перезаписывая `lib/` и `assets/`.
-4. Запустить на Android-устройстве с BLE: `flutter run`.
+```
+lib/
+├── src/
+│   ├── models/
+│   │   ├── app_config.dart          # Конфиг приложения (UUID, операторы, остановки)
+│   │   └── beacon_view_model.dart   # ViewModel BLE-устройства
+│   ├── services/
+│   │   ├── ble_scanner_controller.dart  # BLE-сканирование + дешифровка T1
+│   │   ├── t1_crypto.dart               # AES-128 ECB + таблица поиска
+│   │   ├── stops_repository.dart        # CRUD справочника остановок
+│   │   └── operators_repository.dart    # CRUD реестра операторов
+│   ├── ui/
+│   │   ├── scanner_page.dart        # Главная страница (радар + список)
+│   │   ├── radar_view.dart          # Анимированный радар (CustomPainter)
+│   │   ├── stops_editor_page.dart   # Редактор справочника остановок
+│   │   ├── operators_editor_page.dart # Редактор реестра операторов
+│   │   ├── settings_sheet.dart      # Настройки сканирования (bottom sheet)
+│   │   └── tag_id_panel.dart        # Панель расшифрованных тегов
+│   └── utils/
+│       └── beacon_utils.dart        # UUID-нормализация, форматирование
+assets/
+└── config/
+    └── app_config.json              # UUID T1, внешние операторы, остановки, дефолты
+docs/
+├── screenshots/                     # Скриншоты всех экранов
+├── T1_BLE_Scanner_Product.pdf       # Product page (PDF)
+└── make_pdf.py                      # Скрипт генерации PDF
+```
 
-## Настройка офлайн-справочника
+## Запуск
 
-Файл `assets/config/app_config.json` хранит:
+```bash
+cd mobile/t1_ble_scanner
+flutter pub get
+flutter run -d <device_id> --release
+```
 
-- `local` — описание оператора `T1`
-- `external` — известные чужие операторы по `UUID`
-- `stops` — локальный справочник `номер остановки -> название`
-- `defaults` — стартовые настройки дешифровки
+Требования: Flutter 3.x, Android 6.0+ (API 23), BLE-поддержка, разрешение `BLUETOOTH_SCAN`.
 
-Для production достаточно заменить тестовый ключ и заполнить реальный справочник остановок.
+## Конфигурация
+
+`assets/config/app_config.json`:
+
+```json
+{
+  "local": { "uuid": "FDA50693-...", "name": "T1", "code": "T1" },
+  "external": [
+    { "uuid": "XXXXXXXX-...", "name": "Оператор", "code": "OPR" }
+  ],
+  "stops": { "50": "Парк Победы", "42": "ул. Ленина, дом 1" },
+  "defaults": {
+    "keyHex": "2B7E151628AED2A6ABF7158809CF4F3C",
+    "tagMax": 100,
+    "productionSlotWindow": 5,
+    "prototypeSlotMax": 2000
+  }
+}
+```
+
+## Технические детали
+
+- **AES-128 ключ** расширяется один раз, раундовые ключи переиспользуются — дешифровка ~5–10× быстрее наивной реализации
+- **Изоляты Dart** (`compute()`): тяжёлые AES-вычисления не блокируют UI-поток
+- **Дебаунс уведомлений** 100 мс: не более 10 перестроек UI в секунду при интенсивном потоке пакетов
+- **Ориентация**: фиксирована в портретной — `android:screenOrientation="portrait"`
+- **Хранение**: `SharedPreferences` для справочника остановок и реестра операторов
