@@ -105,3 +105,13 @@ python server/lookup.py --bnso-serial 87654321 --bnso-id 550368416 \
 - в приложение и логи не выводится;
 - в устройство прошивается на производстве.
 
+## Альтернатива: офлайн-дешифровка на телефоне
+
+Серверный lookup можно заменить **локальной дешифровкой на Android-устройстве**:
+
+📱 **[T1 BLE Scanner](../mobile/t1_ble_scanner/)** — Flutter-приложение:
+- тот же алгоритм AES-128 ECB в Dart
+- работает без сети и без сервера
+- поддерживает реестр операторов по UUID
+- **[github.com/sayr777/dynamic-iBeacon](https://github.com/sayr777/dynamic-iBeacon)**
+

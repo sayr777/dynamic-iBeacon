@@ -91,8 +91,36 @@ mac[0] |= 0xC0
 - `Умка`: `ID = Major * 65536 + Minor`
 - `Скаут`: `ID = Major + Minor`
 
+## Мобильное приложение — T1 BLE Scanner
+
+**🔗 [github.com/sayr777/dynamic-iBeacon](https://github.com/sayr777/dynamic-iBeacon)**  
+→ `mobile/t1_ble_scanner/` · [README](mobile/t1_ble_scanner/README.md) · [Release Notes](mobile/t1_ble_scanner/docs/RELEASE_NOTES.md) · [Product Page (PDF)](mobile/t1_ble_scanner/docs/T1_BLE_Scanner_Product.pdf)
+
+Flutter-приложение для Android — автономный BLE-сканер с **локальной дешифровкой T1** на устройстве:
+
+| Экран | Описание |
+|---|---|
+| 📡 Радар | Живой радар с RSSI-позиционированием, цвет по типу оператора |
+| 📋 Список | Карточки устройств: UUID, major/minor, derived MAC, слот |
+| 🛑 Остановки | Редактируемый справочник TagID → название |
+| 🔷 Операторы | Реестр UUID-операторов с выбором цвета |
+| ⚙️ Настройки | AES-128 ключ, режим, диапазон TagID |
+
+**Особенности реализации:**
+- AES-128 ECB дешифровка в Dart-изоляте — не блокирует UI
+- Раундовые ключи разворачиваются один раз (≈5–10× быстрее наивной реализации)
+- Дебаунс `notifyListeners` 100 мс — не более 10 перестроек UI/сек
+- Фиксированная портретная ориентация
+- Офлайн — интернет не требуется
+
+```
+flutter run -d <device_id> --release   # Flutter 3.41.8, Dart 3.11.5
+flutter analyze                        # No issues found ✓
+```
+
 ## Структура проекта
 
+- [mobile/t1_ble_scanner/](mobile/t1_ble_scanner/) — Flutter-приложение для Android
 - [docs/algorithm.md](docs/algorithm.md) — алгоритм генерации и серверной идентификации
 - [docs/protocol.md](docs/protocol.md) — рабочий цикл метки и формат пакета
 - [docs/architecture.md](docs/architecture.md) — архитектура изделия и серверная маршрутизация
@@ -108,8 +136,10 @@ mac[0] |= 0xC0
 
 ## Связанные проекты
 
-| Проект | Назначение |
-|---|---|
-| `dynamic-iBeacon` | динамическая метка на `nRF52832` |
-| `prototype` | быстрый TinyGo-стенд без SWD |
+| Компонент | Назначение | Ссылка |
+|---|---|---|
+| **T1 BLE Scanner** | Android-приложение, офлайн-дешифровка | [mobile/t1_ble_scanner](mobile/t1_ble_scanner/) |
+| **Прошивка** | nRF52832 iBeacon-метка | [firmware/](firmware/) |
+| **Прототип** | TinyGo-стенд на ProMicro nRF52840 | [prototype/](prototype/) |
+| **Сервер** | Lookup + маршрутизация операторов | [server/](server/) |
 
