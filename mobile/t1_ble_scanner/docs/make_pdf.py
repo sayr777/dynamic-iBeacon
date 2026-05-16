@@ -1,148 +1,133 @@
 """
-Generate a PDF product-page for T1 BLE Scanner.
-Layout: A4 portrait, 3 screenshots per row × 2 rows, dark-branded header + captions.
+Generate PDF product page for T1 BLE Scanner using ReportLab.
 Run:  python docs/make_pdf.py
-Output: docs/T1_BLE_Scanner_Product.pdf
+Out:  docs/T1_BLE_Scanner_Product.pdf
 """
-
-from PIL import Image, ImageDraw, ImageFont
-import os, sys, textwrap
+import os
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from PIL import Image as PILImage
 
 # ── paths ──────────────────────────────────────────────────────────────────────
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SS_DIR = os.path.join(SCRIPT_DIR, "screenshots")
-OUT_PDF = os.path.join(SCRIPT_DIR, "T1_BLE_Scanner_Product.pdf")
+DOCS = os.path.dirname(os.path.abspath(__file__))
+SS   = os.path.join(DOCS, "screenshots")
+OUT  = os.path.join(DOCS, "T1_BLE_Scanner_Product.pdf")
 
-# ── page geometry (A4 portrait @ 150 dpi) ─────────────────────────────────────
-DPI = 150
-PAGE_W = int(210 * DPI / 25.4)   # 1240 px
-PAGE_H = int(297 * DPI / 25.4)   # 1754 px
+# ── register Cyrillic-capable fonts ───────────────────────────────────────────
+FD = "C:\\Windows\\Fonts"
+for alias, fname in [
+    ("Arial",   "arial.ttf"),
+    ("ArialBd", "arialbd.ttf"),
+]:
+    try:
+        pdfmetrics.registerFont(TTFont(alias, os.path.join(FD, fname)))
+    except Exception:
+        pass   # fall back to Helvetica below
 
-MARGIN     = 44
-COL_GAP    = 18
-ROW_GAP    = 32
-HEADER_H   = 170
-CAPTION_H  = 72
-COLS       = 3
+def font(bold=False):
+    name = "ArialBd" if bold else "Arial"
+    try:
+        pdfmetrics.getFont(name)
+        return name
+    except Exception:
+        return "Helvetica-Bold" if bold else "Helvetica"
 
-# screenshot crop: keep top 1700 px of 2400 (hide bottom nav bar area)
-CROP_H = 1700
+# ── page geometry (A4 portrait, points) ───────────────────────────────────────
+PW, PH = A4          # 595.27 × 841.89 pt
+M       = 22         # margin pt
+GAP_H   = 10         # horizontal gap between columns
+GAP_V   = 14         # vertical gap between rows
+COLS    = 3
+HDR_H   = 72         # header strip height
+CAP_H   = 38         # caption zone height
+CROP_H  = 1700       # crop phone screenshots to this height (px)
+CROP_W  = 1080
 
-AVAIL_W = PAGE_W - 2 * MARGIN
-THUMB_W = (AVAIL_W - (COLS - 1) * COL_GAP) // COLS
-THUMB_H = int(THUMB_W * CROP_H / 1080)
+col_w   = (PW - 2*M - (COLS-1)*GAP_H) / COLS
+thumb_h = col_w * CROP_H / CROP_W
 
-# ── colours ───────────────────────────────────────────────────────────────────
-BG          = (7, 22, 40)          # #071628
-CARD_BG     = (15, 23, 42)        # #0F172A
-ACCENT      = (0, 196, 255)        # #00C4FF  (light blue)
-GREEN       = (0, 255, 135)        # #00FF87
-WHITE       = (255, 255, 255)
-WHITE54     = (138, 148, 163)
-DIVIDER     = (27, 58, 92)        # #1B3A5C
+# ── palette ───────────────────────────────────────────────────────────────────
+BG      = colors.Color(7/255,  22/255,  40/255)
+CARD    = colors.Color(15/255, 23/255,  42/255)
+DIVIDER = colors.Color(27/255, 58/255,  92/255)
+ACCENT  = colors.Color(0,      196/255, 1)
+GREEN   = colors.Color(0,      1,       135/255)
+WHITE   = colors.white
+DIM     = colors.Color(138/255, 148/255, 163/255)
 
-# ── fonts (Windows system fonts, Cyrillic-capable) ───────────────────────────
-FONT_DIR = "C:\\Windows\\Fonts"
-
-def load(name, size):
-    for n in (name, "arialuni", "arial", "calibri", "segoeui"):
-        try:
-            return ImageFont.truetype(os.path.join(FONT_DIR, n + ".ttf"), size)
-        except Exception:
-            pass
-    return ImageFont.load_default()
-
-F_TITLE    = load("arialbd",  40)
-F_TAGLINE  = load("arial",    18)
-F_LABEL    = load("arialbd",  15)
-F_CAPTION  = load("arial",    13)
-F_FOOTER   = load("arial",    11)
-
-# ── screenshot metadata ───────────────────────────────────────────────────────
+# ── screen metadata ────────────────────────────────────────────────────────────
 SCREENS = [
     ("01_radar.png",
      "Радар",
-     "Живой BLE-радар. Метки T1 расшифровываются локально "
-     "по AES-128 и показываются зелёным. Другие операторы — своим цветом."),
-
+     "Живой BLE-радар. T1-метки расшифровываются локально (AES-128) "
+     "и отображаются зелёным. Другие операторы — своим цветом."),
     ("02_list.png",
      "Список устройств",
-     "Детальная карточка каждого бикона: UUID, major/minor, "
-     "расшифрованный слот, derived MAC и название остановки."),
-
+     "Детальные карточки: UUID, major/minor, derived MAC, "
+     "слот, стартовое время и название остановки."),
     ("03_stops.png",
      "Справочник остановок",
      "Редактируемый справочник TagID → название. "
-     "Поиск по ID или тексту. Данные сохраняются между сессиями."),
-
+     "Поиск, сохранение между сессиями."),
     ("04_operators.png",
      "Операторы UUID",
-     "Реестр UUID-операторов с цветовой маркировкой. "
-     "Каждый оператор получает уникальный цвет на радаре."),
-
+     "Реестр UUID-операторов. Каждый оператор "
+     "получает свой цвет точки на радаре."),
     ("05_settings.png",
-     "Настройки сканирования",
+     "Настройки",
      "AES-128 ключ, режим Prototype / Production, "
-     "диапазон TagID и параметры временного слота."),
-
+     "диапазон TagID и размер окна слота."),
     ("06_operator_edit.png",
      "Выбор цвета",
-     "Интерактивный выбор цвета для оператора: "
-     "12 вариантов, отображаемых на тёмном радарном поле."),
+     "12 цветов на выбор для отображения "
+     "меток оператора на радаре."),
 ]
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ── build PDF ─────────────────────────────────────────────────────────────────
+c = canvas.Canvas(OUT, pagesize=A4)
+c.setTitle("T1 BLE Scanner — Product Overview")
+c.setAuthor("T1")
+c.setSubject("BLE Scanner for T1 Transport System")
 
-def multiline(draw, text, xy, font, fill, max_width, line_height=None):
-    """Wrap text to max_width pixels and draw it."""
-    if line_height is None:
-        line_height = font.size + 4
-    words = text.split()
-    lines, current = [], []
-    for w in words:
-        test = ' '.join(current + [w])
-        bbox = draw.textbbox((0, 0), test, font=font)
-        if bbox[2] - bbox[0] > max_width and current:
-            lines.append(' '.join(current))
-            current = [w]
-        else:
-            current.append(w)
-    if current:
-        lines.append(' '.join(current))
-    x, y = xy
-    for line in lines:
-        draw.text((x, y), line, font=font, fill=fill)
-        y += line_height
-    return y
+# background
+c.setFillColor(BG)
+c.rect(0, 0, PW, PH, fill=1, stroke=0)
 
-# ── build page ────────────────────────────────────────────────────────────────
+# ── header ────────────────────────────────────────────────────────────────────
+c.setFillColor(CARD)
+c.rect(0, PH - HDR_H, PW, HDR_H, fill=1, stroke=0)
 
-page = Image.new("RGB", (PAGE_W, PAGE_H), BG)
-draw = ImageDraw.Draw(page)
+# accent line under header
+c.setFillColor(ACCENT)
+c.rect(0, PH - HDR_H - 1.5, PW, 1.5, fill=1, stroke=0)
 
-# header background strip
-draw.rectangle([0, 0, PAGE_W, HEADER_H], fill=CARD_BG)
-draw.rectangle([0, HEADER_H, PAGE_W, HEADER_H + 2], fill=ACCENT)
+# green dot
+dot_r = 7
+dot_x = M + dot_r
+dot_y = PH - HDR_H/2
+c.setFillColor(GREEN)
+c.circle(dot_x, dot_y, dot_r, fill=1, stroke=0)
 
-# logo dot + title
-dot_r = 14
-dot_cx = MARGIN + dot_r
-dot_cy = HEADER_H // 2
-draw.ellipse([dot_cx - dot_r, dot_cy - dot_r, dot_cx + dot_r, dot_cy + dot_r], fill=GREEN)
+# title
+c.setFillColor(WHITE)
+c.setFont(font(bold=True), 22)
+c.drawString(M + dot_r*2 + 6, dot_y + 4, "T1 BLE Scanner")
 
-title = "T1 BLE Scanner"
-draw.text((MARGIN + dot_r * 2 + 10, dot_cy - 26), title, font=F_TITLE, fill=WHITE)
+# tagline
+c.setFillColor(DIM)
+c.setFont(font(), 9)
+tagline = ("Мобильное приложение для сканирования BLE-меток транспортной системы T1.  "
+           "AES-128 локальное дешифрование · радар-вид · справочник остановок · реестр операторов  "
+           "Flutter 3.41.8 · Android 6+")
+c.drawString(M + dot_r*2 + 6, dot_y - 10, tagline)
 
-tagline = (
-    "Мобильное приложение для сканирования BLE-меток транспортной системы T1. "
-    "Локальное AES-128 дешифрование, радар-вид, справочники остановок и операторов."
-)
-multiline(draw, tagline,
-          (MARGIN + dot_r * 2 + 10, dot_cy + 20),
-          F_TAGLINE, WHITE54, PAGE_W - MARGIN * 2 - dot_r * 2 - 10)
+# ── screenshots grid ──────────────────────────────────────────────────────────
+y_top = PH - HDR_H - 10   # top of first row
 
-# screenshots grid
-y_start = HEADER_H + 28
 for row in range(2):
     for col in range(COLS):
         idx = row * COLS + col
@@ -150,45 +135,64 @@ for row in range(2):
             break
         fname, label, caption = SCREENS[idx]
 
-        x = MARGIN + col * (THUMB_W + COL_GAP)
-        y = y_start + row * (THUMB_H + CAPTION_H + ROW_GAP)
+        x = M + col * (col_w + GAP_H)
+        y = y_top - row * (thumb_h + CAP_H + GAP_V) - thumb_h
 
-        # load + crop + resize screenshot
-        path = os.path.join(SS_DIR, fname)
+        # phone-frame border
+        c.setStrokeColor(DIVIDER)
+        c.setLineWidth(1)
+        c.roundRect(x - 1, y - 1, col_w + 2, thumb_h + 2,
+                    radius=5, fill=0, stroke=1)
+
+        # screenshot image
+        path = os.path.join(SS, fname)
         try:
-            img = Image.open(path).convert("RGB")
-            w, h = img.size
-            # crop to CROP_H from top
-            crop_h = min(CROP_H, h)
-            img = img.crop((0, 0, w, crop_h))
-            img = img.resize((THUMB_W, THUMB_H), Image.LANCZOS)
+            img = PILImage.open(path).convert("RGB")
+            iw, ih = img.size
+            img = img.crop((0, 0, iw, min(CROP_H, ih)))
+            tmp = path + "_tmp.jpg"
+            img.save(tmp, "JPEG", quality=88)
+            c.drawImage(tmp, x, y, width=col_w, height=thumb_h,
+                        preserveAspectRatio=False)
+            os.remove(tmp)
         except Exception as e:
-            print(f"  Warning: could not open {fname}: {e}")
-            img = Image.new("RGB", (THUMB_W, THUMB_H), CARD_BG)
+            c.setFillColor(CARD)
+            c.rect(x, y, col_w, thumb_h, fill=1, stroke=0)
+            c.setFillColor(DIM)
+            c.setFont(font(), 8)
+            c.drawString(x + 4, y + thumb_h/2, str(e)[:40])
 
-        # phone frame: rounded rect border
-        draw.rounded_rectangle(
-            [x - 3, y - 3, x + THUMB_W + 3, y + THUMB_H + 3],
-            radius=14, outline=DIVIDER, width=2
-        )
-        page.paste(img, (x, y))
+        # label
+        label_y = y - 13
+        c.setFillColor(ACCENT)
+        c.setFont(font(bold=True), 9)
+        c.drawString(x, label_y, label)
 
-        # label (bold)
-        draw.text((x, y + THUMB_H + 8), label, font=F_LABEL, fill=ACCENT)
+        # caption (wrap manually to col_w)
+        c.setFillColor(DIM)
+        c.setFont(font(), 7.5)
+        words = caption.split()
+        lines, cur = [], []
+        for w in words:
+            test = ' '.join(cur + [w])
+            if c.stringWidth(test, font(), 7.5) > col_w and cur:
+                lines.append(' '.join(cur)); cur = [w]
+            else:
+                cur.append(w)
+        if cur:
+            lines.append(' '.join(cur))
+        cy = label_y - 10
+        for ln in lines[:3]:
+            c.drawString(x, cy, ln)
+            cy -= 9
 
-        # caption
-        multiline(draw, caption,
-                  (x, y + THUMB_H + 8 + F_LABEL.size + 4),
-                  F_CAPTION, WHITE54, THUMB_W, line_height=16)
+# ── footer ────────────────────────────────────────────────────────────────────
+c.setFillColor(CARD)
+c.rect(0, 0, PW, 16, fill=1, stroke=0)
+c.setFillColor(DIM)
+c.setFont(font(), 7)
+c.drawString(M, 5, "T1 BLE Scanner  ·  Android  ·  AES-128 локальная дешифровка  ·  Flutter 3.41.8")
+c.drawRightString(PW - M, 5, "github.com/sayr777/dynamic-iBeacon")
 
-# footer
-footer_y = PAGE_H - 28
-draw.rectangle([0, footer_y - 12, PAGE_W, PAGE_H], fill=CARD_BG)
-draw.text((MARGIN, footer_y - 6),
-          "T1 BLE Scanner  ·  Android  ·  AES-128 локальная дешифровка  ·  Flutter",
-          font=F_FOOTER, fill=WHITE54)
-
-# ── save as PDF ───────────────────────────────────────────────────────────────
-page.save(OUT_PDF, "PDF", resolution=DPI)
-print(f"Saved: {OUT_PDF}")
-print(f"  Page size: {PAGE_W} x {PAGE_H} px  ({DPI} dpi)")
+c.save()
+print(f"Saved: {OUT}  ({os.path.getsize(OUT)//1024} KB)")
