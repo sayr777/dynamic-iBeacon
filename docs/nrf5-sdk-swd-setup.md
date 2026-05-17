@@ -29,6 +29,8 @@
 - `nRF52 DK`, используемая как внешний J-Link-программатор через `Debug Out`;
 - другой Nordic DK с J-Link OB.
 
+Если J-Link недоступен, можно использовать **Raspberry Pi Pico (RP2040)** с firmware debugprobe — см. [pico-swd-programmer.md](pico-swd-programmer.md).
+
 ### SWD-сигналы для [YJ-16013](../specs/YJ-16013-datasheet.pdf)
 
 Для прошивки и отладки на плате должны быть доступны как минимум:
@@ -60,83 +62,99 @@
 
 ### 1. nRF5 SDK 17.1.0
 
-Нужен архив `nRF5 SDK 17.1.0`.
-
-Практически удобно распаковать его, например, сюда:
+SDK уже скачан и распакован:
 
 ```text
-C:\nRF5\nRF5_SDK_17.1.0\
+C:\nRF5\nRF5_SDK_17.1.0_ddde560\
+```
+
+Если нужно скачать заново — прямая ссылка:
+
+```text
+https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v17.x.x/nRF5_SDK_17.1.0_ddde560.zip
 ```
 
 ### 2. SoftDevice S112
 
-Нужен `SoftDevice S112` версии, совместимой с проектом. Для текущей кодовой базы ориентир:
-
-- `S112 v7.3.0`
-
-Удобно держать `.hex` рядом с SDK, например:
+`SoftDevice S112 v7.2.0` уже скопирован из SDK:
 
 ```text
-C:\nRF5\softdevices\s112_nrf52_7.3.0_softdevice.hex
+C:\nRF5\softdevices\s112_nrf52_7.2.0_softdevice.hex
 ```
+
+Это максимальная версия S112, включённая в nRF5 SDK 17.1.0.
 
 ### 3. Arm GNU Toolchain (`arm-none-eabi`)
 
-Нужен компилятор `arm-none-eabi-gcc`.
+Установлен через [scoop](https://scoop.sh/) (пакет `gcc-arm-none-eabi` из bucket `extras`):
 
-Пример каталога установки:
-
-```text
-C:\GNU Arm Embedded Toolchain\arm-gnu-toolchain-13.3.rel1-mingw-w64-i686-arm-none-eabi\
+```powershell
+scoop bucket add extras
+scoop install gcc-arm-none-eabi
 ```
 
-Или любой другой путь без кириллицы и пробелов в критичных переменных Makefile.
+Установленная версия: **15.2.Rel1**. Бинарники добавляются в `PATH` автоматически.
 
 ### 4. GNU Make
 
-Нужен `make.exe`. Его можно взять:
+Установлен через scoop:
 
-- из `MSYS2`;
-- из `Git for Windows` вместе с Unix toolset;
-- из отдельной установки `GNU Make`.
+```powershell
+scoop install make
+```
 
-Важно, чтобы команда `make --version` работала из PowerShell или `cmd`.
+Установленная версия: **4.4.1**.
 
-### 5. SEGGER J-Link Software and Documentation Pack
+### 5. OpenOCD (при использовании Pico вместо J-Link)
 
-Нужна установленная утилита `JLink.exe` и драйверы J-Link.
+Установлен через scoop:
 
-### 6. nRF Command Line Tools
+```powershell
+scoop install openocd
+```
 
-Нужен пакет с `nrfjprog.exe` и `mergehex.exe`.
+Установленная версия: **0.12.0**. Используется вместо `nrfjprog` при работе с Pico-программатором.
 
-Важный нюанс:
+### 6. SEGGER J-Link + nRF Command Line Tools (при наличии J-Link)
 
-- Nordic помечает `nRF Command Line Tools` как архивный продукт;
-- для `nRF5 SDK` он всё ещё остаётся самым практичным вариантом.
+Если используется SEGGER J-Link — дополнительно нужны:
+
+- [SEGGER J-Link Software](https://www.segger.com/downloads/jlink) — содержит `JLink.exe` и драйверы;
+- [nRF Command Line Tools](https://www.nordicsemi.com/Products/Development-tools/nrf-command-line-tools/download) — содержит `nrfjprog.exe` и `mergehex.exe`.
+
+При работе с Pico (debugprobe + OpenOCD) эти инструменты не нужны — см. [pico-swd-programmer.md](pico-swd-programmer.md).
 
 ## Рекомендуемая структура каталогов
 
-Один из удобных вариантов:
+Текущая структура на диске:
 
 ```text
 C:\nRF5\
-  nRF5_SDK_17.1.0\
+  nRF5_SDK_17.1.0_ddde560\   ← SDK
   softdevices\
-    s112_nrf52_7.3.0_softdevice.hex
-  work\
-    dynamic-iBeacon\
+    s112_nrf52_7.2.0_softdevice.hex
+  work\                       ← каталог для build-каркасов
 ```
 
-Ваш репозиторий при этом может лежать отдельно, например:
+Репозиторий проекта лежит отдельно:
 
 ```text
-C:\T1_GIT\dynamic-iBeacon\
+C:\T1_GIT\ble-tag-jdy23-dynamic\
 ```
 
 ## Проверка окружения
 
 После установки полезно проверить команды:
+
+**При использовании Pico + OpenOCD:**
+
+```powershell
+arm-none-eabi-gcc --version   # Arm GNU Toolchain 15.2.Rel1
+make --version                # GNU Make 4.4.1
+openocd --version             # Open On-Chip Debugger 0.12.0
+```
+
+**При использовании J-Link + nrfjprog:**
 
 ```powershell
 arm-none-eabi-gcc --version
@@ -145,7 +163,7 @@ nrfjprog --version
 mergehex --help
 ```
 
-Если хотя бы одна команда не находится, нужно исправить `PATH`.
+Если команда не находится, нужно исправить `PATH`.
 
 ## Как организовать проект внутри nRF5 SDK
 
@@ -176,7 +194,7 @@ firmware\pca10040e\s112\armgcc\
 Например:
 
 ```text
-C:\nRF5\nRF5_SDK_17.1.0\examples\ble_peripheral\ble_app_beacon_yj16013\
+C:\nRF5\nRF5_SDK_17.1.0_ddde560\examples\ble_peripheral\ble_app_beacon_yj16013\
 ```
 
 Внутри него оставить типичную структуру SDK:
@@ -299,7 +317,7 @@ nrfjprog -f nrf52 --eraseall
 #### Шаг 2. Прошить SoftDevice S112
 
 ```powershell
-nrfjprog -f nrf52 --program C:\nRF5\softdevices\s112_nrf52_7.3.0_softdevice.hex --sectorerase --verify
+nrfjprog -f nrf52 --program C:\nRF5\softdevices\s112_nrf52_7.2.0_softdevice.hex --sectorerase --verify
 nrfjprog -f nrf52 --reset
 ```
 
@@ -329,7 +347,7 @@ nrfjprog -f nrf52 --reset
 #### Шаг 1. Объединить SoftDevice и приложение
 
 ```powershell
-mergehex -m C:\nRF5\softdevices\s112_nrf52_7.3.0_softdevice.hex _build\nrf52832_xxaa.hex -o _build\combined_s112_app.hex
+mergehex -m C:\nRF5\softdevices\s112_nrf52_7.2.0_softdevice.hex _build\nrf52832_xxaa.hex -o _build\combined_s112_app.hex
 ```
 
 #### Шаг 2. Залить объединённый HEX
@@ -416,22 +434,30 @@ nrfjprog -f nrf52 --recover
 
 ```powershell
 nrfjprog -f nrf52 --eraseall
-nrfjprog -f nrf52 --program C:\nRF5\softdevices\s112_nrf52_7.3.0_softdevice.hex --sectorerase --verify
+nrfjprog -f nrf52 --program C:\nRF5\softdevices\s112_nrf52_7.2.0_softdevice.hex --sectorerase --verify
 nrfjprog -f nrf52 --program _build\nrf52832_xxaa.hex --sectorerase --verify
 nrfjprog -f nrf52 --reset
 ```
 
 ## Рекомендация для этого проекта
 
-Для [YJ-16013](../specs/YJ-16013-datasheet.pdf) на `nRF52832` в рамках этого проекта наиболее практичный путь такой:
+Для [YJ-16013](../specs/YJ-16013-datasheet.pdf) на `nRF52832` поддерживаются два пути прошивки:
 
-- `nRF5 SDK 17.1.0`
-- `SoftDevice S112 v7.3.0`
-- `Arm GNU Toolchain`
-- `make`
-- `J-Link + nrfjprog`
+**Основной (текущий) — Raspberry Pi Pico + OpenOCD:**
 
-Это даёт самый простой и воспроизводимый сценарий для BLE-маяка с `System OFF` и прошивкой через SWD.
+- `nRF5 SDK 17.1.0` → `C:\nRF5\nRF5_SDK_17.1.0_ddde560\`
+- `SoftDevice S112 v7.2.0` → `C:\nRF5\softdevices\`
+- `Arm GNU Toolchain 15.2.Rel1` (scoop: `gcc-arm-none-eabi`)
+- `GNU Make 4.4.1` (scoop: `make`)
+- `OpenOCD 0.12.0` (scoop: `openocd`)
+- Raspberry Pi Pico с firmware [debugprobe](https://github.com/raspberrypi/debugprobe/releases)
+
+Подробнее — в [pico-swd-programmer.md](pico-swd-programmer.md).
+
+**Альтернативный — SEGGER J-Link + nrfjprog:**
+
+- те же SDK, SoftDevice и toolchain;
+- `SEGGER J-Link Software` + `nRF Command Line Tools` (nrfjprog).
 
 ## Официальные страницы
 
