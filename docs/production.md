@@ -6,7 +6,7 @@
 
 1. Закупить модули [YJ-16013](../specs/YJ-16013-datasheet.pdf) одной партии.
 2. Собрать плату: [YJ-16013](../specs/YJ-16013-datasheet.pdf) + `MCP1700` + `BAT54` + обвязка + тест-поинты `SWD/RESET`.
-3. Прошить `nRF52832` через `SWD` (J-LINK / nRF52 DK): `SoftDevice S112` + приложение с `TAG_ID`, `KEY`, `unix_time`.
+3. Прошить `nRF52832` через `SWD` (J-LINK / Raspberry Pi Pico): `SoftDevice S112` + приложение с `TAG_ID`, `KEY`, `unix_time`.
 4. Активировать `APPROTECT` (включено в финальной прошивке).
 5. Проверить BLE-рекламу: `Major/Minor` меняются раз в `5 мин`, `MAC` меняется вместе.
 6. Припаять батарею.
@@ -14,7 +14,7 @@
 8. Установить в корпус, залить компаундом (не в антенную зону).
 9. Финальный BLE-тест и контроль тока (цель `< 10 µА` средний).
 
-## Прошивка nRF52832 (nRF5 SDK + nrfjprog)
+## Прошивка nRF52832 (nRF5 SDK)
 
 Каждый модуль прошивается индивидуально с уникальными параметрами:
 
@@ -25,11 +25,30 @@
   unix_time — текущее время UTC в момент прошивки
 ```
 
-Команды:
+### Вариант A: Raspberry Pi Pico + OpenOCD (текущий)
+
+Подробнее — в [pico-swd-programmer.md](pico-swd-programmer.md).
+
+```powershell
+# 1. Стереть чип
+openocd -f interface/cmsis-dap.cfg -f target/nrf52.cfg `
+  -c "init; halt; nrf5 mass_erase; exit"
+
+# 2. Прошить SoftDevice S112 v7.2.0
+openocd -f interface/cmsis-dap.cfg -f target/nrf52.cfg `
+  -c "init; halt; program C:/nRF5/softdevices/s112_nrf52_7.2.0_softdevice.hex verify; reset; exit"
+
+# 3. Собрать и прошить приложение
+make
+openocd -f interface/cmsis-dap.cfg -f target/nrf52.cfg `
+  -c "init; halt; program _build/nrf52832_xxaa.hex verify; reset; exit"
+```
+
+### Вариант B: SEGGER J-Link + nrfjprog
 
 ```bash
-# 1. Прошить SoftDevice S112 v7.3.0 (один раз на линии)
-nrfjprog --program s112_nrf52_7.3.0_softdevice.hex --chiperase --reset
+# 1. Прошить SoftDevice S112 v7.2.0 (один раз на линии)
+nrfjprog --program s112_nrf52_7.2.0_softdevice.hex --chiperase --reset
 
 # 2. Прошить приложение (TAG_ID уникален для каждой метки)
 make TAG_ID=42 TAG_UNIX_TIME=$(date +%s) flash
@@ -39,13 +58,6 @@ nrfjprog --readregs | grep APPROTECT
 
 # 4. Сброс и старт
 nrfjprog --reset
-```
-
-Альтернатива через `west flash` (nRF Connect SDK):
-
-```bash
-west flash --runner nrfjprog -- --program s112_nrf52_7.3.0_softdevice.hex --chiperase
-west flash --runner nrfjprog
 ```
 
 ## Синхронизация времени
