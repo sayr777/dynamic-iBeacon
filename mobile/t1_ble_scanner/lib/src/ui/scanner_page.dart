@@ -33,7 +33,7 @@ class _ScannerPageState extends State<ScannerPage>
   late final TextEditingController _protoSlotMaxCtrl;
   late final TabController _tabCtrl;
 
-  T1ScanMode _scanMode = T1ScanMode.prototype;
+  T1ScanMode _scanMode = T1ScanMode.production;
 
   @override
   void initState() {
