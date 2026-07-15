@@ -430,17 +430,29 @@ class BleScannerController extends ChangeNotifier {
             ? result.device.platformName
             : null;
 
-    final now = DateTime.now();
+    // Use result.timeStamp (the actual BLE stack packet time) rather than
+    // DateTime.now(), because scanResults delivers the FULL device list on
+    // every advertisement — if we used now() every device in the batch would
+    // get the same lastSeen and identical lastInterval values.
+    final packetTime = result.timeStamp;
     final existing = _devices[key];
-    final interval =
-        existing != null ? now.difference(existing.lastSeen) : null;
+    // Only count as a new packet if timeStamp advanced by more than 50 ms.
+    // This filters out devices that were just "carried along" in the batch
+    // without actually sending a new advertisement.
+    Duration? interval;
+    if (existing != null &&
+        packetTime.difference(existing.lastSeen).inMilliseconds > 50) {
+      interval = packetTime.difference(existing.lastSeen);
+    } else {
+      interval = existing?.lastInterval; // keep previous measured interval
+    }
 
     _devices[key] = BeaconViewModel(
       id: key,
       deviceName: name,
       radioMac: radioMac,
       rssi: result.rssi,
-      lastSeen: now,
+      lastSeen: packetTime,
       iBeacon: iBeacon,
       operatorName: configOperator?.name ?? registryOp?.name,
       operatorCode: configOperator?.code ?? registryOp?.code,
@@ -473,15 +485,16 @@ class BleScannerController extends ChangeNotifier {
         final existing = _devices.remove(unresolvedKey);
         final stopName = _stopName(entry.tagId);
         final now = DateTime.now();
-        final interval =
-            existing != null ? now.difference(existing.lastSeen) : null;
+        // Preserve the interval already measured in _handleScanResult rather
+        // than computing a new one here (async resolution gap is not a real interval).
+        final interval = existing?.lastInterval;
 
         _devices['t1:${entry.tagId}'] = BeaconViewModel(
           id: 't1:${entry.tagId}',
           deviceName: existing?.deviceName,
           radioMac: existing?.radioMac,
           rssi: existing?.rssi ?? -999,
-          lastSeen: now,
+          lastSeen: existing?.lastSeen ?? now,
           iBeacon: frame,
           operatorName: _config?.localOperator.name,
           operatorCode: _config?.localOperator.code,
