@@ -33,6 +33,8 @@ class _ScannerPageState extends State<ScannerPage>
   late final TextEditingController _prodWindowCtrl;
   late final TextEditingController _protoSlotMaxCtrl;
   late final TabController _tabCtrl;
+  final _cardKeys = <String, GlobalKey>{};
+  final _listScrollCtrl = ScrollController();
 
   T1ScanMode _scanMode = T1ScanMode.production;
 
@@ -93,9 +95,27 @@ class _ScannerPageState extends State<ScannerPage>
     }
   }
 
+  void _navigateToCard(BeaconViewModel device) {
+    _tabCtrl.animateTo(1,
+        duration: const Duration(milliseconds: 250), curve: Curves.easeInOut);
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      final key = _cardKeys[device.id];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.1,
+        );
+      }
+    });
+  }
+
   @override
   void dispose() {
     _tabCtrl.dispose();
+    _listScrollCtrl.dispose();
     _stopsRepo.dispose();
     _operatorsRepo.dispose();
     _controller
@@ -357,11 +377,17 @@ class _ScannerPageState extends State<ScannerPage>
                       child: TabBarView(
                         controller: _tabCtrl,
                         children: [
-                          _RadarTab(devices: devices, scanning: scanning),
+                          _RadarTab(
+                            devices: devices,
+                            scanning: scanning,
+                            onTagTap: _navigateToCard,
+                          ),
                           _ListTab(
                             devices: devices,
                             mode: _controller.activeSettings?.mode ??
                                 T1ScanMode.production,
+                            cardKeys: _cardKeys,
+                            scrollCtrl: _listScrollCtrl,
                           ),
                         ],
                       ),
@@ -479,10 +505,15 @@ class _Chip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RadarTab extends StatelessWidget {
-  const _RadarTab({required this.devices, required this.scanning});
+  const _RadarTab({
+    required this.devices,
+    required this.scanning,
+    required this.onTagTap,
+  });
 
   final List<BeaconViewModel> devices;
   final bool scanning;
+  final void Function(BeaconViewModel) onTagTap;
 
   @override
   Widget build(BuildContext context) {
@@ -505,7 +536,7 @@ class _RadarTab extends StatelessWidget {
         Expanded(
           flex: 2,
           child: SingleChildScrollView(
-            child: TagIdPanel(devices: devices),
+            child: TagIdPanel(devices: devices, onTap: onTagTap),
           ),
         ),
       ],
@@ -518,10 +549,17 @@ class _RadarTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ListTab extends StatelessWidget {
-  const _ListTab({required this.devices, required this.mode});
+  const _ListTab({
+    required this.devices,
+    required this.mode,
+    required this.cardKeys,
+    required this.scrollCtrl,
+  });
 
   final List<BeaconViewModel> devices;
   final T1ScanMode mode;
+  final Map<String, GlobalKey> cardKeys;
+  final ScrollController scrollCtrl;
 
   @override
   Widget build(BuildContext context) {
@@ -550,10 +588,15 @@ class _ListTab extends StatelessWidget {
     }
 
     return ListView.separated(
+      controller: scrollCtrl,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
       itemCount: devices.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) => _DeviceCard(item: devices[i], mode: mode),
+      itemBuilder: (_, i) => _DeviceCard(
+        key: cardKeys.putIfAbsent(devices[i].id, GlobalKey.new),
+        item: devices[i],
+        mode: mode,
+      ),
     );
   }
 }
@@ -563,7 +606,7 @@ class _ListTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _DeviceCard extends StatefulWidget {
-  const _DeviceCard({required this.item, required this.mode});
+  const _DeviceCard({super.key, required this.item, required this.mode});
 
   final BeaconViewModel item;
   final T1ScanMode mode;
@@ -574,10 +617,13 @@ class _DeviceCard extends StatefulWidget {
 
 class _DeviceCardState extends State<_DeviceCard> {
   Timer? _holdTimer;
+  Timer? _flashTimer;
+  bool _copied = false;
 
   @override
   void dispose() {
     _holdTimer?.cancel();
+    _flashTimer?.cancel();
     super.dispose();
   }
 
@@ -594,7 +640,13 @@ class _DeviceCardState extends State<_DeviceCard> {
   void _onHoldComplete() {
     final text = _buildClipboardText();
     Clipboard.setData(ClipboardData(text: text));
+    HapticFeedback.mediumImpact();
     if (mounted) {
+      setState(() => _copied = true);
+      _flashTimer?.cancel();
+      _flashTimer = Timer(const Duration(seconds: 1), () {
+        if (mounted) setState(() => _copied = false);
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -666,13 +718,15 @@ class _DeviceCardState extends State<_DeviceCard> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final mode = widget.mode;
-    final borderColor = item.isResolved
-        ? Colors.greenAccent
-        : item.isT1
-            ? Colors.orangeAccent
-            : item.isIBeacon
-                ? Colors.lightBlueAccent
-                : Colors.white12;
+    final borderColor = _copied
+        ? Colors.cyanAccent
+        : item.isResolved
+            ? Colors.greenAccent
+            : item.isT1
+                ? Colors.orangeAccent
+                : item.isIBeacon
+                    ? Colors.lightBlueAccent
+                    : Colors.white12;
 
     final title = shortDisplayName(
       fallback:
@@ -682,10 +736,17 @@ class _DeviceCardState extends State<_DeviceCard> {
 
     final active = item.isActive;
 
-    final card = Card(
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: borderColor.withValues(alpha: 0.7)),
+    final card = AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: borderColor.withValues(alpha: _copied ? 1.0 : 0.7),
+          width: _copied ? 2.0 : 1.0,
+        ),
+        color: _copied
+            ? Colors.cyanAccent.withValues(alpha: 0.08)
+            : const Color(0xFF1E293B),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),

@@ -4,9 +4,10 @@ import '../models/beacon_view_model.dart';
 
 /// Panel that lists every resolved T1 tag, sorted by signal strength.
 class TagIdPanel extends StatelessWidget {
-  const TagIdPanel({super.key, required this.devices});
+  const TagIdPanel({super.key, required this.devices, this.onTap});
 
   final List<BeaconViewModel> devices;
+  final void Function(BeaconViewModel)? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +59,7 @@ class TagIdPanel extends StatelessWidget {
           ),
         ),
         // ── cards ────────────────────────────────────────────────────────────
-        ...resolved.map((d) => _TagCard(device: d)),
+        ...resolved.map((d) => _TagCard(device: d, onTap: onTap)),
         const SizedBox(height: 8),
       ],
     );
@@ -68,9 +69,10 @@ class TagIdPanel extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _TagCard extends StatelessWidget {
-  const _TagCard({required this.device});
+  const _TagCard({required this.device, this.onTap});
 
   final BeaconViewModel device;
+  final void Function(BeaconViewModel)? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +84,9 @@ class _TagCard extends StatelessWidget {
         ? '${ageSec}s ago'
         : '${ageSec ~/ 60}m ago';
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap != null ? () => onTap!(device) : null,
+      child: Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       decoration: BoxDecoration(
         color: const Color(0xFF0D2137),
@@ -175,6 +179,7 @@ class _TagCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
