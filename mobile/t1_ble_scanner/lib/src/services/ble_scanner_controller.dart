@@ -430,12 +430,17 @@ class BleScannerController extends ChangeNotifier {
             ? result.device.platformName
             : null;
 
+    final now = DateTime.now();
+    final existing = _devices[key];
+    final interval =
+        existing != null ? now.difference(existing.lastSeen) : null;
+
     _devices[key] = BeaconViewModel(
       id: key,
       deviceName: name,
       radioMac: radioMac,
       rssi: result.rssi,
-      lastSeen: DateTime.now(),
+      lastSeen: now,
       iBeacon: iBeacon,
       operatorName: configOperator?.name ?? registryOp?.name,
       operatorCode: configOperator?.code ?? registryOp?.code,
@@ -444,6 +449,7 @@ class BleScannerController extends ChangeNotifier {
       isResolved: resolved,
       note: note,
       resolvedData: resolvedData,
+      lastInterval: interval,
     );
     // No notifyListeners() here — the stream listener batches all packets and
     // calls _scheduleNotify() once per scan cycle.
@@ -466,13 +472,16 @@ class BleScannerController extends ChangeNotifier {
         final unresolvedKey = 'ib:${frame.uuid}:${frame.major}:${frame.minor}';
         final existing = _devices.remove(unresolvedKey);
         final stopName = _stopName(entry.tagId);
+        final now = DateTime.now();
+        final interval =
+            existing != null ? now.difference(existing.lastSeen) : null;
 
         _devices['t1:${entry.tagId}'] = BeaconViewModel(
           id: 't1:${entry.tagId}',
           deviceName: existing?.deviceName,
           radioMac: existing?.radioMac,
           rssi: existing?.rssi ?? -999,
-          lastSeen: DateTime.now(),
+          lastSeen: now,
           iBeacon: frame,
           operatorName: _config?.localOperator.name,
           operatorCode: _config?.localOperator.code,
@@ -487,6 +496,7 @@ class BleScannerController extends ChangeNotifier {
             mac: entry.mac,
             stopName: stopName,
           ),
+          lastInterval: interval,
         );
       }
     }).catchError((Object error) {
