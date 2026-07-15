@@ -77,9 +77,17 @@ class BeaconViewModel {
   /// True when a non-T1 operator has been matched and assigned a color.
   bool get isCustomOperator => operatorColor != null && !isT1;
 
-  /// True if a packet was received within the last 30 seconds.
-  bool get isActive =>
-      DateTime.now().difference(lastSeen).inSeconds < 30;
+  /// True if a packet was received recently.
+  /// Threshold adapts to the measured interval: max(30s, lastInterval × 2).
+  /// This prevents false "Нет сигнала" for slow advertisers (e.g. T1 night mode = 60s).
+  bool get isActive {
+    final diff = DateTime.now().difference(lastSeen);
+    if (lastInterval != null &&
+        lastInterval! >= const Duration(seconds: 30)) {
+      return diff < lastInterval! * 2;
+    }
+    return diff.inSeconds < 30;
+  }
 
   BeaconViewModel copyWith({
     String? deviceName,
