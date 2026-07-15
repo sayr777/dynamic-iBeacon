@@ -377,6 +377,22 @@ class BleScannerController extends ChangeNotifier {
     return true;
   }
 
+  // Corrects for platform-channel batching: Android sometimes delivers 2–3
+  // packets at once, making the measured gap a 2× or 3× multiple of the real
+  // advertising interval. Divides back to the true interval when a multiple
+  // in the range 2–5× is detected. Larger ratios (>5×) indicate a genuine
+  // interval change (e.g. night-mode switch 2 s → 60 s) and are kept as-is.
+  static Duration _estimateInterval(Duration measured, Duration? previous) {
+    if (previous == null) return measured;
+    final prevMs = previous.inMilliseconds;
+    if (prevMs < 50) return measured;
+    final ratio = measured.inMilliseconds / prevMs;
+    if (ratio >= 1.7 && ratio < 5.5) {
+      return Duration(milliseconds: measured.inMilliseconds ~/ ratio.round());
+    }
+    return measured;
+  }
+
   void _handleScanResult(ScanResult result) {
     final advData = result.advertisementData;
     final mfrMap = advData.manufacturerData;
@@ -497,7 +513,11 @@ class BleScannerController extends ChangeNotifier {
       final diff = rawTs.difference(existing.lastSeen);
       // diff < 10 ms is a key-change artefact (T1 ib:... → t1:... transition):
       // existing.lastSeen was copied from the previous key's rawTs, so diff ≈ 0.
-      interval = diff.inMilliseconds >= 10 ? diff : existing.lastInterval;
+      if (diff.inMilliseconds >= 10) {
+        interval = _estimateInterval(diff, existing.lastInterval);
+      } else {
+        interval = existing.lastInterval;
+      }
     } else {
       interval = existing?.lastInterval;
     }
