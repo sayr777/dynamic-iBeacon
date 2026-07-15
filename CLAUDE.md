@@ -128,7 +128,7 @@ Server lookup searches `tag_id × [slot-1, slot, slot+1]` to handle clock drift 
 
 **Night mode**: Tag increases wake interval from 2 s to 60 s between configurable local-time hours; `Major/Minor` still rotate on the 5-min slot boundary (driven by `unix_time`, not the wake counter).
 
-## Mobile app UI (v1.3.0)
+## Mobile app UI (v1.3.3)
 
 App name: **T1 BLE Control**
 
@@ -136,6 +136,22 @@ App name: **T1 BLE Control**
 - **RadarView**: accepts `scanning: bool`. When false — animation stops (`_ctrl.stop()`), sweep resets to 0.
 - **BeaconViewModel**: `lastInterval` (Duration?) = time between two last packets; `isActive` getter = `lastSeen` < 30 s ago.
 - **Device cards**: show `_ActivityBadge` (green "Активна" / red "Нет сигнала") and "Интервал посылки" row.
+- **Auto-remove**: devices absent > 1 minute removed by `_cleanupTimer` (Timer.periodic 30 s).
+
+### flutter_blue_plus `result.timeStamp` behaviour (IMPORTANT)
+
+In flutter_blue_plus v1.36.x, `ScanResult.timeStamp = DateTime.now()` is set in `fromProto()` the moment Flutter receives the native BLE callback for that specific device. The `scanResults` stream emits the FULL cached list on every packet — but only the device that actually sent a packet gets a new `ScanResult` object (fresh `timeStamp`). Other devices in the batch retain their OLD `ScanResult` with OLD timestamps.
+
+Consequence: `rawTs != prevRawTs` (exact equality check) reliably detects genuine new packets per device. A `> 50ms` threshold is too coarse — it breaks for devices advertising ≤ 50ms.
+
+T1 key-change artefact: when `ib:UUID:major:minor` resolves to `t1:tagId`, `_rawTimestamps` must be transferred from the old key to the new key, otherwise the first post-resolution batch produces `interval = rawTs - existing.lastSeen ≈ 0ms`.
+
+### Unit tests
+
+```bash
+cd mobile/t1_ble_scanner
+flutter test   # 15 tests in test/models/beacon_view_model_test.dart
+```
 
 ## app_config.json structure
 

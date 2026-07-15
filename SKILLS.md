@@ -85,9 +85,10 @@ git push origin vX.Y.Z
 # CI builds APK and creates GitHub Release automatically (~6 min)
 ```
 
-## flutter analyze
+## flutter analyze + tests
 
 ```powershell
 cd mobile/t1_ble_scanner
 flutter analyze   # must show: No issues found
+flutter test      # 15 unit tests in test/models/beacon_view_model_test.dart
 ```

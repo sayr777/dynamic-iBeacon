@@ -30,6 +30,12 @@ Always use `-f 5000` (5 kHz) with pyocd for this board. 100 kHz causes connectio
 - Do not run `flutter run` or `flutter build apk` locally (no Android SDK)
 - Do not use `make flash_softdevice` with s112 v7.3.0 — board has v7.2.0 flashed
 
+## flutter_blue_plus timestamp key facts
+- `result.timeStamp = DateTime.now()` set in `fromProto()` on actual packet receive
+- Advances ONLY for the device that sent; other devices in the batch keep old timestamp
+- Detect new packets: `rawTs != prevRawTs` (exact), NOT `diff > 50ms`
+- T1 key change `ib:... → t1:...`: transfer `_rawTimestamps[oldKey]` to new key in `_scheduleT1Resolution`
+
 ## Release process
 1. Edit mobile code
 2. Bump `mobile/t1_ble_scanner/pubspec.yaml` version
