@@ -30,6 +30,9 @@ class BleScannerController extends ChangeNotifier {
   final Set<String> _resolvingT1Keys = <String>{};
   final LinkedHashMap<String, BeaconViewModel> _devices =
       LinkedHashMap<String, BeaconViewModel>();
+  // Raw Android timestamps (SystemClock.elapsedRealtimeNanos-based) per device.
+  // Used only to detect new packets; NOT used for lastSeen/isActive display.
+  final Map<String, DateTime> _rawTimestamps = {};
 
   bool _initializing = true;
   bool _scanning = false;
@@ -297,12 +300,14 @@ class BleScannerController extends ChangeNotifier {
     _scanSubscription = null;
     _resolvedT1Cache.clear();
     _resolvingT1Keys.clear();
+    _rawTimestamps.clear();
     _status = 'Сканирование остановлено';
     notifyListeners();
   }
 
   void clearDevices() {
     _devices.clear();
+    _rawTimestamps.clear();
     // Clear resolution cache so T1 tags are re-resolved on the next packet.
     // Without this, slot-changed tags remain invisible after the list is cleared.
     _resolvedT1Cache.clear();
@@ -430,29 +435,32 @@ class BleScannerController extends ChangeNotifier {
             ? result.device.platformName
             : null;
 
-    // Use result.timeStamp (the actual BLE stack packet time) rather than
-    // DateTime.now(), because scanResults delivers the FULL device list on
-    // every advertisement — if we used now() every device in the batch would
-    // get the same lastSeen and identical lastInterval values.
-    final packetTime = result.timeStamp;
+    // result.timeStamp on Android is SystemClock.elapsedRealtimeNanos()-based
+    // (nanoseconds since boot), NOT a wall-clock UTC time. Using it directly
+    // as lastSeen produces a DateTime near 1970 → isActive always false.
+    // We keep it only as a change-detector: if it advanced vs the stored raw
+    // value, this device actually sent a new advertisement in this batch.
+    final rawTs = result.timeStamp;
+    final prevRawTs = _rawTimestamps[key];
+    final isNewPacket = prevRawTs == null ||
+        rawTs.difference(prevRawTs).inMilliseconds.abs() > 50;
+
+    final now = DateTime.now();
     final existing = _devices[key];
-    // Only count as a new packet if timeStamp advanced by more than 50 ms.
-    // This filters out devices that were just "carried along" in the batch
-    // without actually sending a new advertisement.
     Duration? interval;
-    if (existing != null &&
-        packetTime.difference(existing.lastSeen).inMilliseconds > 50) {
-      interval = packetTime.difference(existing.lastSeen);
+    if (isNewPacket && existing != null) {
+      interval = now.difference(existing.lastSeen);
     } else {
-      interval = existing?.lastInterval; // keep previous measured interval
+      interval = existing?.lastInterval;
     }
+    if (isNewPacket) _rawTimestamps[key] = rawTs;
 
     _devices[key] = BeaconViewModel(
       id: key,
       deviceName: name,
       radioMac: radioMac,
       rssi: result.rssi,
-      lastSeen: packetTime,
+      lastSeen: isNewPacket ? now : (existing?.lastSeen ?? now),
       iBeacon: iBeacon,
       operatorName: configOperator?.name ?? registryOp?.name,
       operatorCode: configOperator?.code ?? registryOp?.code,
