@@ -21,6 +21,7 @@ class BleScannerController extends ChangeNotifier {
   StreamSubscription<bool>? _isScanningSubscription;
   Timer? _notifyDebounce;
   Timer? _scanRestartTimer;
+  Timer? _cleanupTimer;
 
   AppConfig? _config;
   StopsRepository? _stopsRepo;
@@ -191,11 +192,27 @@ class BleScannerController extends ChangeNotifier {
     _restarting = false; // now start watching for real OS-kill events
   }
 
+  /// Removes devices that have not sent a packet for more than 1 minute.
+  void _cleanupStaleDevices() {
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 1));
+    final stale = _devices.keys
+        .where((k) => _devices[k]!.lastSeen.isBefore(cutoff))
+        .toList();
+    if (stale.isEmpty) return;
+    for (final k in stale) {
+      _devices.remove(k);
+      _rawTimestamps.remove(k);
+    }
+    _scheduleNotify();
+  }
+
   /// Low-level: stops any existing scan/subscription, starts a new one, and
   /// arms the 25-minute proactive-restart timer. Does NOT touch _scanning.
   Future<void> _startScanInternal() async {
     _scanRestartTimer?.cancel();
     _scanRestartTimer = null;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
     _notifyDebounce?.cancel();
 
     await FlutterBluePlus.stopScan();
@@ -252,6 +269,11 @@ class BleScannerController extends ChangeNotifier {
         }
       });
 
+      // Remove devices absent for more than 1 minute (every 30 s).
+      _cleanupTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (_scanning) _cleanupStaleDevices();
+      });
+
       notifyListeners();
     } on FormatException catch (error) {
       _status = 'Неверный T1 KEY';
@@ -292,6 +314,8 @@ class BleScannerController extends ChangeNotifier {
     _restarting = false;
     _scanRestartTimer?.cancel();
     _scanRestartTimer = null;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
     _isScanningSubscription?.cancel();
     _isScanningSubscription = null;
     _notifyDebounce?.cancel();
@@ -435,21 +459,24 @@ class BleScannerController extends ChangeNotifier {
             ? result.device.platformName
             : null;
 
-    // result.timeStamp on Android is SystemClock.elapsedRealtimeNanos()-based
-    // (nanoseconds since boot), NOT a wall-clock UTC time. Using it directly
-    // as lastSeen produces a DateTime near 1970 → isActive always false.
-    // We keep it only as a change-detector: if it advanced vs the stored raw
-    // value, this device actually sent a new advertisement in this batch.
+    // result.timeStamp = DateTime.now() set by flutter_blue_plus at the moment
+    // the native Android advertisement callback fires for THIS device.
+    // It advances only when the device sends a new packet — other devices'
+    // packets do NOT update it. Safe to use directly as wall-clock lastSeen.
     final rawTs = result.timeStamp;
     final prevRawTs = _rawTimestamps[key];
-    final isNewPacket = prevRawTs == null ||
-        rawTs.difference(prevRawTs).inMilliseconds.abs() > 50;
+    // Any change in rawTs means a genuine new advertisement from this device.
+    // No ms threshold: rawTs is DateTime.now() per-packet, so even 1 µs change
+    // is a real new packet. This correctly handles high-frequency advertisers.
+    final isNewPacket = prevRawTs == null || rawTs != prevRawTs;
 
-    final now = DateTime.now();
     final existing = _devices[key];
     Duration? interval;
     if (isNewPacket && existing != null) {
-      interval = now.difference(existing.lastSeen);
+      final diff = rawTs.difference(existing.lastSeen);
+      // diff < 10 ms is a key-change artefact (T1 ib:... → t1:... transition):
+      // existing.lastSeen was copied from the previous key's rawTs, so diff ≈ 0.
+      interval = diff.inMilliseconds >= 10 ? diff : existing.lastInterval;
     } else {
       interval = existing?.lastInterval;
     }
@@ -460,7 +487,7 @@ class BleScannerController extends ChangeNotifier {
       deviceName: name,
       radioMac: radioMac,
       rssi: result.rssi,
-      lastSeen: isNewPacket ? now : (existing?.lastSeen ?? now),
+      lastSeen: isNewPacket ? rawTs : (existing?.lastSeen ?? rawTs),
       iBeacon: iBeacon,
       operatorName: configOperator?.name ?? registryOp?.name,
       operatorCode: configOperator?.code ?? registryOp?.code,
@@ -491,6 +518,13 @@ class BleScannerController extends ChangeNotifier {
         _resolvedT1Cache[lookupKey] = entry;
         final unresolvedKey = 'ib:${frame.uuid}:${frame.major}:${frame.minor}';
         final existing = _devices.remove(unresolvedKey);
+        // Transfer the stored rawTimestamp to the new key so the first batch
+        // after resolution is not misclassified as a "new packet" (which would
+        // produce interval ≈ 0 ms because rawTs == existing.lastSeen).
+        final prevRawTs = _rawTimestamps.remove(unresolvedKey);
+        if (prevRawTs != null) {
+          _rawTimestamps['t1:${entry.tagId}'] = prevRawTs;
+        }
         final stopName = _stopName(entry.tagId);
         final now = DateTime.now();
         // Preserve the interval already measured in _handleScanResult rather
@@ -585,6 +619,7 @@ class BleScannerController extends ChangeNotifier {
     _scanning = false;
     _restarting = false;
     _scanRestartTimer?.cancel();
+    _cleanupTimer?.cancel();
     _isScanningSubscription?.cancel();
     _notifyDebounce?.cancel();
     _stopsRepo?.removeListener(_onStopsChanged);
