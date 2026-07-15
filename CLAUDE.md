@@ -146,6 +146,10 @@ Consequence: `rawTs != prevRawTs` (exact equality check) reliably detects genuin
 
 T1 key-change artefact: when `ib:UUID:major:minor` resolves to `t1:tagId`, `_rawTimestamps` must be transferred from the old key to the new key, otherwise the first post-resolution batch produces `interval = rawTs - existing.lastSeen ≈ 0ms`.
 
+**CRITICAL**: `continuousUpdates: true` is required in `startScan`. Without it, Android deduplicates identical BLE packets — the T1 tag sends the same `major:minor` for the entire 5-minute slot, so Android only delivers the first packet. `rawTs` freezes → `isActive = false` after 30 s. With `continuousUpdates: true`, Android delivers every packet (including duplicates).
+
+**CRITICAL**: `removeIfGone: Duration(minutes: 1)` is required alongside `continuousUpdates`. Without it, flutter_blue_plus's internal `output` cache retains stale devices forever. After `_cleanupStaleDevices` removes a device from `_devices`, the next batch re-adds it from `output` → endless oscillation every 30 s.
+
 ### Unit tests
 
 ```bash
