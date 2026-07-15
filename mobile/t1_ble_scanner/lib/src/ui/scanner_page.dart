@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../models/beacon_view_model.dart';
@@ -561,14 +562,110 @@ class _ListTab extends StatelessWidget {
 // Device card (detailed view for the List tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _DeviceCard extends StatelessWidget {
+class _DeviceCard extends StatefulWidget {
   const _DeviceCard({required this.item, required this.mode});
 
   final BeaconViewModel item;
   final T1ScanMode mode;
 
   @override
+  State<_DeviceCard> createState() => _DeviceCardState();
+}
+
+class _DeviceCardState extends State<_DeviceCard> {
+  Timer? _holdTimer;
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) {
+    _holdTimer?.cancel();
+    _holdTimer = Timer(const Duration(seconds: 2), _onHoldComplete);
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+  }
+
+  void _onHoldComplete() {
+    final text = _buildClipboardText();
+    Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'RAW скопирован (${widget.item.radioMac ?? widget.item.id})',
+          ),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String _fmtDateTime(DateTime dt) {
+    final l = dt.toLocal();
+    String p(int v) => v.toString().padLeft(2, '0');
+    return '${l.year}-${p(l.month)}-${p(l.day)} ${p(l.hour)}:${p(l.minute)}:${p(l.second)}';
+  }
+
+  String _buildClipboardText() {
+    final item = widget.item;
+    final buf = StringBuffer();
+    buf.writeln('[T1 BLE Scanner] ${_fmtDateTime(item.lastSeen)}');
+    if (item.radioMac != null) {
+      buf.writeln('MAC: ${item.radioMac}  RSSI: ${item.rssi} dBm');
+    }
+    final type = item.isResolved
+        ? 'T1 resolved'
+        : item.isT1
+            ? 'T1'
+            : item.isIBeacon
+                ? 'iBeacon'
+                : 'BLE';
+    buf.writeln('Type: $type');
+    if (item.resolvedData != null) {
+      buf.writeln(
+          'Tag ID: ${item.resolvedData!.tagId}  Slot: ${item.resolvedData!.slot}');
+      if (item.resolvedData!.stopName != null) {
+        buf.writeln('Stop: ${item.resolvedData!.stopName}');
+      }
+      buf.writeln('Derived MAC: ${item.resolvedData!.mac}');
+    }
+    if (item.iBeacon != null) {
+      buf.writeln('UUID: ${formatUuid(item.iBeacon!.uuid).toUpperCase()}');
+      final maj = item.iBeacon!.major;
+      final min = item.iBeacon!.minor;
+      buf.writeln('Major: $maj (0x${maj.toRadixString(16).padLeft(4, '0').toUpperCase()})'
+          '  Minor: $min (0x${min.toRadixString(16).padLeft(4, '0').toUpperCase()})');
+      buf.writeln('TX Power: ${item.iBeacon!.txPower} dBm');
+    }
+    if (item.companyId != null) {
+      buf.writeln(
+          'Device Type: 0x${item.companyId!.toRadixString(16).padLeft(4, '0').toUpperCase()}');
+    }
+    buf.writeln(
+        'Flags: ${item.connectable ? "Connectable" : "Non-connectable"}');
+    if (item.serviceUuids.isNotEmpty) {
+      buf.writeln('Services: ${item.serviceUuids.join(', ')}');
+    }
+    if (item.lastInterval != null) {
+      buf.writeln('Interval: ${_fmtInterval(item.lastInterval!)}');
+    }
+    if (item.rawMfrHex != null) {
+      buf.writeln('Raw: ${item.rawMfrHex}');
+    }
+    return buf.toString().trimRight();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final mode = widget.mode;
     final borderColor = item.isResolved
         ? Colors.greenAccent
         : item.isT1
@@ -585,7 +682,7 @@ class _DeviceCard extends StatelessWidget {
 
     final active = item.isActive;
 
-    return Card(
+    final card = Card(
       shape: RoundedRectangleBorder(
         side: BorderSide(color: borderColor.withValues(alpha: 0.7)),
         borderRadius: BorderRadius.circular(14),
@@ -685,6 +782,12 @@ class _DeviceCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+    return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapUp: (_) => _cancelHold(),
+      onTapCancel: _cancelHold,
+      child: card,
     );
   }
 
