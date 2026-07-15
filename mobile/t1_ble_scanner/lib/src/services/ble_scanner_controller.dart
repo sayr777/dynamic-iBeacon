@@ -398,6 +398,19 @@ class BleScannerController extends ChangeNotifier {
       }
     }
 
+    // Full manufacturer data hex including 2-byte company ID prefix (NRF Connect style).
+    String? rawMfrHex;
+    if (mfrBytes != null) {
+      final prefix = companyId != null
+          ? [companyId & 0xFF, (companyId >> 8) & 0xFF]
+          : <int>[];
+      rawMfrHex = [...prefix, ...mfrBytes]
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join(' ');
+    }
+    final connectable = advData.connectable;
+    final serviceUuids = List<String>.unmodifiable(advData.serviceUuids);
+
     final iBeacon = _parseIBeacon(companyId, mfrBytes);
     final radioMac = result.device.remoteId.str;
 
@@ -503,6 +516,10 @@ class BleScannerController extends ChangeNotifier {
       note: note,
       resolvedData: resolvedData,
       lastInterval: interval,
+      connectable: connectable,
+      serviceUuids: serviceUuids,
+      companyId: companyId,
+      rawMfrHex: rawMfrHex,
     );
     // No notifyListeners() here — the stream listener batches all packets and
     // calls _scheduleNotify() once per scan cycle.
@@ -558,6 +575,10 @@ class BleScannerController extends ChangeNotifier {
             stopName: stopName,
           ),
           lastInterval: interval,
+          connectable: existing?.connectable ?? true,
+          serviceUuids: existing?.serviceUuids ?? const [],
+          companyId: existing?.companyId,
+          rawMfrHex: existing?.rawMfrHex,
         );
       }
     }).catchError((Object error) {

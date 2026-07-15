@@ -43,6 +43,10 @@ class BeaconViewModel {
     this.note,
     this.resolvedData,
     this.lastInterval,
+    this.connectable = true,
+    this.serviceUuids = const [],
+    this.companyId,
+    this.rawMfrHex,
   });
 
   final String id;
@@ -62,6 +66,11 @@ class BeaconViewModel {
   /// Time between the last two consecutive packets from this device.
   /// Null if this is the first observed packet.
   final Duration? lastInterval;
+  final bool connectable;
+  final List<String> serviceUuids;
+  final int? companyId;
+  /// Full manufacturer data hex including 2-byte company ID prefix, e.g. "4c 00 02 15 ...".
+  final String? rawMfrHex;
 
   bool get isIBeacon => iBeacon != null;
 
@@ -86,6 +95,10 @@ class BeaconViewModel {
     String? note,
     T1ResolvedData? resolvedData,
     Object? lastInterval = _sentinel,
+    bool? connectable,
+    List<String>? serviceUuids,
+    int? companyId,
+    String? rawMfrHex,
   }) {
     return BeaconViewModel(
       id: id,
@@ -106,6 +119,10 @@ class BeaconViewModel {
       lastInterval: identical(lastInterval, _sentinel)
           ? this.lastInterval
           : lastInterval as Duration?,
+      connectable: connectable ?? this.connectable,
+      serviceUuids: serviceUuids ?? this.serviceUuids,
+      companyId: companyId ?? this.companyId,
+      rawMfrHex: rawMfrHex ?? this.rawMfrHex,
     );
   }
 }

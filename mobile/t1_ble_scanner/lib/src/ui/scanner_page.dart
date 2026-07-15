@@ -660,12 +660,28 @@ class _DeviceCard extends StatelessWidget {
               _kv('Major / Minor',
                   '${item.iBeacon!.major} / ${item.iBeacon!.minor}'),
               _kv('TX power', '${item.iBeacon!.txPower} dBm'),
+              _kv('Scenario Type', '0x02'),
+              _kv('Version', '0x15'),
+              if (item.companyId != null)
+                _kv('Device Type',
+                    '0x${item.companyId!.toRadixString(16).padLeft(4, '0').toUpperCase()}'),
+              _kv('Salt',
+                  '0x${item.iBeacon!.major.toRadixString(16).padLeft(4, '0').toUpperCase()}'),
+              _kv('Device Hash',
+                  '0x${item.iBeacon!.minor.toRadixString(16).padLeft(4, '0').toUpperCase()}'),
             ],
             if (item.resolvedData != null) ...[
               _kv('Slot', '${item.resolvedData!.slot}'),
               _kv('Slot start', formatSlotStart(item.resolvedData!.slot, mode)),
               _kv('Derived MAC', item.resolvedData!.mac),
             ],
+            if (item.companyId != null && item.iBeacon == null)
+              _kv('Device Type',
+                  '0x${item.companyId!.toRadixString(16).padLeft(4, '0').toUpperCase()}'),
+            _kv('Flags', item.connectable ? 'Connectable' : 'Non-connectable'),
+            if (item.serviceUuids.isNotEmpty)
+              _kv('Services', item.serviceUuids.join(', ')),
+            if (item.rawMfrHex != null) _kv('Raw data', item.rawMfrHex!),
           ],
         ),
       ),
@@ -706,7 +722,7 @@ class _DeviceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 106,
+            width: 116,
             child: Text(key,
                 style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ),
