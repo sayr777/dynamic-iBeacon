@@ -409,7 +409,9 @@ class BleScannerController extends ChangeNotifier {
           .join(' ');
     }
     final connectable = advData.connectable;
-    final serviceUuids = List<String>.unmodifiable(advData.serviceUuids);
+    // advData.serviceUuids is List<Guid> in flutter_blue_plus 1.36.x, not List<String>
+    final serviceUuids =
+        List<String>.unmodifiable(advData.serviceUuids.map((g) => g.toString()));
 
     final iBeacon = _parseIBeacon(companyId, mfrBytes);
     final radioMac = result.device.remoteId.str;
