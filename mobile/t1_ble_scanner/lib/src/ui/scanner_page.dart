@@ -230,6 +230,17 @@ class _ScannerPageState extends State<ScannerPage>
     }
   }
 
+  // ── scan toggle ───────────────────────────────────────────────────────────
+
+  Future<void> _toggleScan() async {
+    if (_controller.scanning) {
+      await _controller.stopScan();
+      _controller.clearDevices();
+    } else {
+      await _startScan();
+    }
+  }
+
   // ── build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -239,27 +250,67 @@ class _ScannerPageState extends State<ScannerPage>
       builder: (context, _) {
         final devices = _controller.devices;
         final scanning = _controller.scanning;
+        final initializing = _controller.initializing;
 
         return Scaffold(
           backgroundColor: const Color(0xFF0F172A),
           appBar: AppBar(
             backgroundColor: const Color(0xFF0F172A),
-            title: Row(
-              children: [
-                const Text('T1 BLE Scanner'),
-                const SizedBox(width: 10),
-                if (scanning)
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(
-                        Theme.of(context).colorScheme.primary,
+            title: GestureDetector(
+              onTap: initializing ? null : _toggleScan,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: scanning
+                      ? const Color(0xFF1D4ED8).withValues(alpha: 0.25)
+                      : const Color(0xFF1F2937),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: scanning
+                        ? const Color(0xFF3B82F6)
+                        : Colors.white24,
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      scanning
+                          ? Icons.sensors_rounded
+                          : Icons.sensors_off_rounded,
+                      size: 16,
+                      color: scanning
+                          ? const Color(0xFF60A5FA)
+                          : Colors.white38,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'T1 BLE Control',
+                      style: TextStyle(
+                        color: scanning ? Colors.white : Colors.white38,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-              ],
+                    if (scanning) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          valueColor: const AlwaysStoppedAnimation(
+                            Color(0xFF60A5FA),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
             centerTitle: false,
             actions: [
@@ -285,7 +336,7 @@ class _ScannerPageState extends State<ScannerPage>
               ),
             ],
           ),
-          body: _controller.initializing
+          body: initializing
               ? const Center(child: CircularProgressIndicator())
               : Column(
                   children: [
@@ -305,7 +356,7 @@ class _ScannerPageState extends State<ScannerPage>
                       child: TabBarView(
                         controller: _tabCtrl,
                         children: [
-                          _RadarTab(devices: devices),
+                          _RadarTab(devices: devices, scanning: scanning),
                           _ListTab(
                             devices: devices,
                             mode: _controller.activeSettings?.mode ??
@@ -427,9 +478,10 @@ class _Chip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RadarTab extends StatelessWidget {
-  const _RadarTab({required this.devices});
+  const _RadarTab({required this.devices, required this.scanning});
 
   final List<BeaconViewModel> devices;
+  final bool scanning;
 
   @override
   Widget build(BuildContext context) {
@@ -443,7 +495,7 @@ class _RadarTab extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: AspectRatio(
                 aspectRatio: 1,
-                child: RadarView(devices: devices),
+                child: RadarView(devices: devices, scanning: scanning),
               ),
             ),
           ),
@@ -531,6 +583,8 @@ class _DeviceCard extends StatelessWidget {
       preferred: item.deviceName,
     );
 
+    final active = item.isActive;
+
     return Card(
       shape: RoundedRectangleBorder(
         side: BorderSide(color: borderColor.withValues(alpha: 0.7)),
@@ -547,6 +601,8 @@ class _DeviceCard extends StatelessWidget {
                   child: Text(title,
                       style: Theme.of(context).textTheme.titleSmall),
                 ),
+                _ActivityBadge(active: active),
+                const SizedBox(width: 8),
                 Text(
                   '${item.rssi} dBm',
                   style: Theme.of(context)
@@ -597,6 +653,8 @@ class _DeviceCard extends StatelessWidget {
             const SizedBox(height: 8),
             if (item.radioMac != null) _kv('Radio MAC', item.radioMac!),
             _kv('Seen', _fmtTime(item.lastSeen)),
+            if (item.lastInterval != null)
+              _kv('Интервал посылки', _fmtInterval(item.lastInterval!)),
             if (item.iBeacon != null) ...[
               _kv('UUID', formatUuid(item.iBeacon!.uuid)),
               _kv('Major / Minor',
@@ -618,6 +676,12 @@ class _DeviceCard extends StatelessWidget {
     final l = dt.toLocal();
     String p(int v) => v.toString().padLeft(2, '0');
     return '${p(l.hour)}:${p(l.minute)}:${p(l.second)}';
+  }
+
+  String _fmtInterval(Duration d) {
+    final ms = d.inMilliseconds;
+    if (ms < 1000) return '$ms мс';
+    return '${(ms / 1000.0).toStringAsFixed(1)} сек';
   }
 
   Widget _badge(String text) {
@@ -649,6 +713,51 @@ class _DeviceCard extends StatelessWidget {
           Expanded(
             child: Text(value,
                 style: const TextStyle(color: Colors.white, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity badge
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ActivityBadge extends StatelessWidget {
+  const _ActivityBadge({required this.active});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? Colors.greenAccent : Colors.redAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            active ? 'Активна' : 'Нет сигнала',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
           ),
         ],
       ),

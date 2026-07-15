@@ -42,6 +42,7 @@ class BeaconViewModel {
     this.isResolved = false,
     this.note,
     this.resolvedData,
+    this.lastInterval,
   });
 
   final String id;
@@ -58,11 +59,18 @@ class BeaconViewModel {
   final bool isResolved;
   final String? note;
   final T1ResolvedData? resolvedData;
+  /// Time between the last two consecutive packets from this device.
+  /// Null if this is the first observed packet.
+  final Duration? lastInterval;
 
   bool get isIBeacon => iBeacon != null;
 
   /// True when a non-T1 operator has been matched and assigned a color.
   bool get isCustomOperator => operatorColor != null && !isT1;
+
+  /// True if a packet was received within the last 30 seconds.
+  bool get isActive =>
+      DateTime.now().difference(lastSeen).inSeconds < 30;
 
   BeaconViewModel copyWith({
     String? deviceName,
@@ -77,6 +85,7 @@ class BeaconViewModel {
     bool? isResolved,
     String? note,
     T1ResolvedData? resolvedData,
+    Object? lastInterval = _sentinel,
   }) {
     return BeaconViewModel(
       id: id,
@@ -94,6 +103,9 @@ class BeaconViewModel {
       isResolved: isResolved ?? this.isResolved,
       note: note ?? this.note,
       resolvedData: resolvedData ?? this.resolvedData,
+      lastInterval: identical(lastInterval, _sentinel)
+          ? this.lastInterval
+          : lastInterval as Duration?,
     );
   }
 }

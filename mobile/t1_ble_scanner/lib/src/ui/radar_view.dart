@@ -13,10 +13,12 @@ class RadarView extends StatefulWidget {
   const RadarView({
     super.key,
     required this.devices,
+    required this.scanning,
     this.maxRangeMeters = 20.0,
   });
 
   final List<BeaconViewModel> devices;
+  final bool scanning;
   final double maxRangeMeters;
 
   @override
@@ -45,7 +47,8 @@ class _RadarViewState extends State<RadarView>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
-    )..repeat();
+    );
+    if (widget.scanning) _ctrl.repeat();
     _buildStaticPainters();
   }
 
@@ -54,6 +57,15 @@ class _RadarViewState extends State<RadarView>
     super.didUpdateWidget(old);
     if (old.maxRangeMeters != widget.maxRangeMeters) {
       _buildStaticPainters();
+    }
+    if (old.scanning != widget.scanning) {
+      if (widget.scanning) {
+        _ctrl.repeat();
+      } else {
+        _ctrl
+          ..stop()
+          ..value = 0;
+      }
     }
   }
 
