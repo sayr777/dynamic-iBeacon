@@ -85,6 +85,33 @@ git push origin vX.Y.Z
 # CI builds APK and creates GitHub Release automatically (~6 min)
 ```
 
+## Release: добавить скриншоты экрана в GitHub Release
+
+**ОБЯЗАТЕЛЬНО** после каждого релиза добавлять актуальные скриншоты приложения
+в Assets GitHub Release — технический специалист или пользователь должны видеть
+как выглядит интерфейс ПЕРЕД установкой.
+
+```powershell
+$adb = "C:\Users\sayr\AppData\Local\Temp\platform-tools\adb.exe"
+
+# 1. Снять скриншоты с работающего телефона
+& $adb -s <device_id> shell screencap -p /sdcard/screen_list.png
+& $adb -s <device_id> pull /sdcard/screen_list.png C:\Users\sayr\AppData\Local\Temp\screen_list.png
+
+& $adb -s <device_id> shell screencap -p /sdcard/screen_card.png
+& $adb -s <device_id> pull /sdcard/screen_card.png C:\Users\sayr\AppData\Local\Temp\screen_card.png
+
+# 2. Загрузить в GitHub Release как Assets
+gh release upload vX.Y.Z `
+  "C:\Users\sayr\AppData\Local\Temp\screen_list.png" `
+  "C:\Users\sayr\AppData\Local\Temp\screen_card.png"
+```
+
+Снимать скриншоты надо когда:
+- Список устройств виден (вкладка «Список»)
+- Развёрнутая карточка BLE с полями NRF Connect style
+- При наличии расшифрованного T1-тега — отдельный скрин с ним
+
 ## flutter analyze + tests
 
 ```powershell
