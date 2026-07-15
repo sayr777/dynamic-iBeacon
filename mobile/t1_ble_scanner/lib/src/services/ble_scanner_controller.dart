@@ -225,11 +225,17 @@ class BleScannerController extends ChangeNotifier {
 
       debugPrint('[T1] Starting BLE scan (flutter_blue_plus)...');
 
-      // flutter_blue_plus: androidUsesFineLocation=true — нужно для сканирования
-      // на всех версиях Android. lowLatency — максимальная частота пакетов.
+      // continuousUpdates: обновлять ScanResult (и timeStamp) при каждом пакете,
+      // включая дубликаты — иначе timeStamp «замирает» между реальными пакетами
+      // от устройства и интервал нельзя корректно вычислить.
+      // removeIfGone: flutter_blue_plus сам удаляет устройство из своего output-кэша
+      // через 1 мин тишины — без этого оно попадает обратно в каждый батч даже
+      // после нашей ручной очистки.
       await FlutterBluePlus.startScan(
         androidScanMode: AndroidScanMode.lowLatency,
         androidUsesFineLocation: true,
+        continuousUpdates: true,
+        removeIfGone: const Duration(minutes: 1),
       );
 
       _status = 'Сканирование BLE запущено';
