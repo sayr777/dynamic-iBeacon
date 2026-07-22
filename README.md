@@ -130,6 +130,13 @@ Flutter-приложение для Android — автономный BLE-ска�
 | 🔷 Операторы | Реестр UUID-операторов с выбором цвета |
 | ⚙️ Настройки | AES-128 ключ, режим, диапазон TagID |
 
+<p>
+  <img src="docs/images/screenshots/screenshot-radar.png"     width="24%" />
+  <img src="docs/images/screenshots/screenshot-list.png"      width="24%" />
+  <img src="docs/images/screenshots/screenshot-stops.png"     width="24%" />
+  <img src="docs/images/screenshots/screenshot-operators.png" width="24%" />
+</p>
+
 **Особенности реализации:**
 - Запускается в режиме **Production** по умолчанию (поиск по реальному unix_time)
 - Окно поиска слотов `productionSlotWindow = 3000` (±10 дней) — компенсирует сброс unix_time при каждом включении метки
