@@ -120,7 +120,7 @@ mac[0] |= 0xC0
 
 Flutter-приложение для Android — автономный BLE-сканер с **локальной дешифровкой T1** на устройстве.
 
-**Последний релиз: v1.2.2** — [скачать APK](https://github.com/sayr777/dynamic-iBeacon/releases/latest)
+**Последний релиз: v1.4.1** — [скачать APK](https://github.com/sayr777/dynamic-iBeacon/releases/latest)
 
 | Экран | Описание |
 |---|---|
