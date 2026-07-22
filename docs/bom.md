@@ -1,5 +1,7 @@
 ﻿# BOM и ориентир по стоимости
 
+![Модуль YJ-16013 с конденсатором и батарейкой](images/yj16013-module-with-capacitor-and-battery.png)
+
 Выбранная платформа: **`nRF52832` ([YJ-16013](../specs/YJ-16013-datasheet.pdf))**.
 
 Цены ориентировочные: AliExpress / LCSC qty 10–50 шт.
