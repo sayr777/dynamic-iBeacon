@@ -1,0 +1,14 @@
+# Claude Code service files
+AGENT.md
+SKILLS.md
+
+# Firmware local config (contains real keys)
+firmware/src/tag_config.h
+
+# Build artifacts
+firmware/pca10040e/s112/armgcc/_build/
+
+# Temp files
+tmp/
+tmp-*.js
+outputs/
