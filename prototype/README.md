@@ -24,6 +24,8 @@
 
 `ProMicro NRF52840 v1940` — китайский клон `nice!nano`.
 
+![ProMicro nRF52840](../docs/images/promicro-nrf52840.png)
+
 | Параметр | Значение |
 |---|---|
 | SoC | `nRF52840` |
