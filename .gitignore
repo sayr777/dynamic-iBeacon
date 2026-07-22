@@ -1,6 +1,7 @@
 # Claude Code service files
 AGENT.md
 SKILLS.md
+CLAUDE.md
 
 # Firmware local config (contains real keys)
 firmware/src/tag_config.h
