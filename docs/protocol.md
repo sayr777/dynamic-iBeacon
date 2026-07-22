@@ -66,6 +66,15 @@ UUID, Major, Minor, RSSI, timestamp
    - вызывает внешний REST оператора.
 ```
 
+### Офлайн-идентификация (без сервера)
+
+Реализована в **[T1 BLE Scanner](../mobile/t1_ble_scanner/)** — Android-приложении:
+- AES-128 ECB выполняется локально на телефоне
+- Перебор `tag_id × [slot-1, slot, slot+1]` в Dart-изоляте
+- Результат: TagID, слот, derived MAC, название остановки
+- Интернет не требуется
+- **[github.com/sayr777/dynamic-iBeacon](https://github.com/sayr777/dynamic-iBeacon)**
+
 ### Легаси-путь
 
 Если БНСО ещё не передают `UUID`, допускаются:

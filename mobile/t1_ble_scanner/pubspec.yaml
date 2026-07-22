@@ -1,7 +1,7 @@
 name: t1_ble_scanner
 description: Offline Flutter BLE scanner for iBeacon recognition and local T1 stop decoding.
 publish_to: 'none'
-version: 0.1.0+1
+version: 1.4.1+18
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   flutter_blue_plus: ^1.35.5
   permission_handler: ^12.0.0
+  shared_preferences: ^2.3.4
 
 dev_dependencies:
   flutter_test:

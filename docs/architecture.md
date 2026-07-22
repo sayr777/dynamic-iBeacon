@@ -61,6 +61,20 @@ BLE/BNSO -> RNIS -> local lookup -> TagID -> stop/object registry
 BLE/BNSO -> RNIS -> detect foreign UUID -> external REST -> foreign TagID
 ```
 
+### Офлайн (мобильное приложение)
+
+Дешифровка может выполняться **локально на устройстве** без сервера:
+
+```text
+BLE-метка -> T1 BLE Scanner (Android) -> AES-128 локально -> TagID + название остановки
+```
+
+📱 **[T1 BLE Scanner](../mobile/t1_ble_scanner/)** — Flutter-приложение:
+- AES-128 ECB в Dart-изоляте (не блокирует UI)
+- Радар-вид с RSSI-позиционированием
+- Справочник остановок и реестр операторов
+- **[github.com/sayr777/dynamic-iBeacon](https://github.com/sayr777/dynamic-iBeacon)**
+
 ## Потребление
 
 | Фаза | Средний вклад |

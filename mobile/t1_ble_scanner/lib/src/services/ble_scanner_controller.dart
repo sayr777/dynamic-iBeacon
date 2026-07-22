@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart' show debugPrint;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -11,18 +10,30 @@ import '../models/app_config.dart';
 import '../models/beacon_view_model.dart';
 import '../utils/beacon_utils.dart';
 import 't1_crypto.dart';
+import 'operators_repository.dart';
+import 'stops_repository.dart';
 
 class BleScannerController extends ChangeNotifier {
   BleScannerController();
 
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothAdapterState>? _adapterSub;
+  StreamSubscription<bool>? _isScanningSubscription;
+  Timer? _notifyDebounce;
+  Timer? _scanRestartTimer;
+  Timer? _cleanupTimer;
 
   AppConfig? _config;
+  StopsRepository? _stopsRepo;
+  OperatorsRepository? _operatorsRepo;
   T1LookupSettings? _activeSettings;
-  Map<String, T1LookupEntry> _lookupTable = const {};
+  final Map<String, T1LookupEntry> _resolvedT1Cache = {};
+  final Set<String> _resolvingT1Keys = <String>{};
   final LinkedHashMap<String, BeaconViewModel> _devices =
       LinkedHashMap<String, BeaconViewModel>();
+  // Raw Android timestamps (SystemClock.elapsedRealtimeNanos-based) per device.
+  // Used only to detect new packets; NOT used for lastSeen/isActive display.
+  final Map<String, DateTime> _rawTimestamps = {};
 
   bool _initializing = true;
   bool _scanning = false;
@@ -44,14 +55,88 @@ class BleScannerController extends ChangeNotifier {
 
   T1LookupSettings? get activeSettings => _activeSettings;
 
-  List<BeaconViewModel> get devices =>
-      _devices.values.toList(growable: false)
-        ..sort((a, b) {
-          if (a.isResolved != b.isResolved) return a.isResolved ? -1 : 1;
-          if (a.isT1 != b.isT1) return a.isT1 ? -1 : 1;
-          if (a.isIBeacon != b.isIBeacon) return a.isIBeacon ? -1 : 1;
-          return b.rssi.compareTo(a.rssi);
-        });
+  /// Attaches a [StopsRepository] so the controller picks up live name changes.
+  void attachStopsRepository(StopsRepository repo) {
+    _stopsRepo?.removeListener(_onStopsChanged);
+    _stopsRepo = repo;
+    repo.addListener(_onStopsChanged);
+  }
+
+  /// Attaches an [OperatorsRepository] to resolve custom UUID operators.
+  void attachOperatorsRepository(OperatorsRepository repo) {
+    _operatorsRepo?.removeListener(_onOperatorsChanged);
+    _operatorsRepo = repo;
+    repo.addListener(_onOperatorsChanged);
+  }
+
+  /// Called when operators change — re-classifies visible non-T1 iBeacon devices.
+  void _onOperatorsChanged() {
+    var changed = false;
+    for (final key in _devices.keys.toList()) {
+      final vm = _devices[key];
+      if (vm == null || vm.isT1 || vm.iBeacon == null) continue;
+      final uuid = vm.iBeacon!.uuid;
+      final op = _operatorsRepo?.getByUuid(uuid);
+      final newColor = op?.colorValue;
+      if (newColor == vm.operatorColor &&
+          op?.name == vm.operatorName &&
+          op?.code == vm.operatorCode) {
+        continue;
+      }
+      _devices[key] = vm.copyWith(
+        operatorColor: newColor,
+        operatorName: op?.name,
+        operatorCode: op?.code,
+        note: op != null ? 'iBeacon оператора «${op.name}»' : 'Неизвестный iBeacon',
+      );
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Looks up a stop name: custom entries override config defaults.
+  String? _stopName(int tagId) =>
+      _stopsRepo?.getName(tagId) ?? _config?.stops[tagId];
+
+  /// Called when stops directory changes — refreshes names in resolved devices.
+  void _onStopsChanged() {
+    var changed = false;
+    for (final key in _devices.keys.toList()) {
+      final vm = _devices[key];
+      if (vm == null || !vm.isResolved || vm.resolvedData == null) continue;
+      final tagId = vm.resolvedData!.tagId;
+      final newName = _stopName(tagId);
+      if (newName == vm.resolvedData!.stopName) continue;
+      _devices[key] = vm.copyWith(
+        note: newName == null
+            ? 'T1: номер остановки расшифрован, но не найден в справочнике'
+            : 'T1: остановка расшифрована локально',
+        resolvedData: T1ResolvedData(
+          tagId: tagId,
+          slot: vm.resolvedData!.slot,
+          mac: vm.resolvedData!.mac,
+          stopName: newName,
+        ),
+      );
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  List<BeaconViewModel> get devices => _devices.values.toList(growable: false)
+    ..sort((a, b) {
+      if (a.isResolved != b.isResolved) return a.isResolved ? -1 : 1;
+      if (a.isT1 != b.isT1) return a.isT1 ? -1 : 1;
+      if (a.isIBeacon != b.isIBeacon) return a.isIBeacon ? -1 : 1;
+      return b.rssi.compareTo(a.rssi);
+    });
+
+  /// Debounced notify — coalesces rapid BLE packet bursts into one UI rebuild
+  /// (max ~10 times/sec). This prevents jank when many devices are nearby.
+  void _scheduleNotify() {
+    if (_notifyDebounce?.isActive == true) return;
+    _notifyDebounce = Timer(const Duration(milliseconds: 100), notifyListeners);
+  }
 
   Future<void> initialize() async {
     try {
@@ -73,7 +158,8 @@ class BleScannerController extends ChangeNotifier {
     _activeSettings = settings;
     _error = null;
 
-    debugPrint('[T1] startScan called, adapterState=${FlutterBluePlus.adapterStateNow}');
+    debugPrint(
+        '[T1] startScan called, adapterState=${FlutterBluePlus.adapterStateNow}');
 
     final granted = await _ensurePermissions();
     debugPrint('[T1] permissions granted=$granted');
@@ -83,43 +169,117 @@ class BleScannerController extends ChangeNotifier {
       return;
     }
 
-    try {
-      _status = 'Подготовка локальной таблицы T1...';
-      notifyListeners();
+    _resolvedT1Cache.clear();
+    _resolvingT1Keys.clear();
+    _scanning = true;
+    // _restarting=true suppresses the initial isScanning→false event that
+    // BehaviorSubject emits immediately on subscribe (before any scan starts),
+    // and also the false event fired by stopScan() inside _startScanInternal().
+    // It is reset to false after the scan is fully up.
+    _restarting = true;
 
-      _lookupTable = await T1Decoder.buildLookupTable(settings);
-      _status = _lookupTable.isEmpty
-          ? 'Сканирование BLE без дешифровки T1'
-          : 'Сканирование BLE с локальной дешифровкой T1';
+    // Watch isScanning stream: if Android silently kills the scan while we
+    // still think we're scanning, restart proactively.
+    _isScanningSubscription?.cancel();
+    _isScanningSubscription = FlutterBluePlus.isScanning.listen((active) {
+      if (!active && _scanning && !_restarting) {
+        debugPrint('[T1] isScanning→false while _scanning=true — restarting');
+        _scheduleRestart();
+      }
+    });
+
+    await _startScanInternal();
+    _restarting = false; // now start watching for real OS-kill events
+  }
+
+  /// Removes devices that have not sent a packet for more than 1 minute.
+  void _cleanupStaleDevices() {
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 1));
+    final stale = _devices.keys
+        .where((k) => _devices[k]!.lastSeen.isBefore(cutoff))
+        .toList();
+    if (stale.isEmpty) return;
+    for (final k in stale) {
+      _devices.remove(k);
+      _rawTimestamps.remove(k);
+    }
+    _scheduleNotify();
+  }
+
+  /// Low-level: stops any existing scan/subscription, starts a new one, and
+  /// arms the 25-minute proactive-restart timer. Does NOT touch _scanning.
+  Future<void> _startScanInternal() async {
+    _scanRestartTimer?.cancel();
+    _scanRestartTimer = null;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    _notifyDebounce?.cancel();
+
+    await FlutterBluePlus.stopScan();
+    await _scanSubscription?.cancel();
+    _scanSubscription = null;
+
+    try {
+      _status = 'Запуск BLE-сканирования...';
+      notifyListeners();
 
       debugPrint('[T1] Starting BLE scan (flutter_blue_plus)...');
 
-      // flutter_blue_plus: allowDuplicates=true — получаем обновления при
-      // каждом пакете, даже если MAC не менялся.
-      // androidUsesFineLocation=true — нужно для сканирования на всех версиях Android.
+      // continuousUpdates: обновлять ScanResult (и timeStamp) при каждом пакете,
+      // включая дубликаты — иначе timeStamp «замирает» между реальными пакетами
+      // от устройства и интервал нельзя корректно вычислить.
+      // removeIfGone: flutter_blue_plus сам удаляет устройство из своего output-кэша
+      // через 1 мин тишины — без этого оно попадает обратно в каждый батч даже
+      // после нашей ручной очистки.
       await FlutterBluePlus.startScan(
         androidScanMode: AndroidScanMode.lowLatency,
         androidUsesFineLocation: true,
+        continuousUpdates: true,
+        removeIfGone: const Duration(minutes: 1),
       );
+
+      _status = 'Сканирование BLE запущено';
 
       _scanSubscription = FlutterBluePlus.scanResults.listen(
         (results) {
           for (final r in results) {
             _handleScanResult(r);
           }
+          // Update status once per batch — not inside the loop.
           _status = 'Сканирование — пакетов: ${_devices.length}';
-          notifyListeners();
+          // Debounced: coalesces rapid bursts into one UI rebuild.
+          _scheduleNotify();
         },
         onError: (Object error) {
           debugPrint('[T1] Scan error: $error');
           _error = error.toString();
           _status = 'Ошибка сканирования BLE';
-          _scanning = false;
-          notifyListeners();
+          if (_scanning) {
+            _scheduleRestart();
+          }
+        },
+        onDone: () {
+          // Android closed the stream — typically the 30-min OS kill.
+          debugPrint('[T1] scanResults stream closed — restarting');
+          if (_scanning) {
+            _scheduleRestart();
+          }
         },
       );
 
-      _scanning = true;
+      // Proactive restart every 25 min — before Android's ~30-min silent kill.
+      _scanRestartTimer = Timer(const Duration(minutes: 25), () {
+        if (_scanning) {
+          debugPrint('[T1] Proactive 25-min restart');
+          _scheduleRestart();
+        }
+      });
+
+      // Remove devices absent for more than 1 minute (every 30 s).
+      _cleanupTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (_scanning) _cleanupStaleDevices();
+      });
+
       notifyListeners();
     } on FormatException catch (error) {
       _status = 'Неверный T1 KEY';
@@ -134,17 +294,54 @@ class BleScannerController extends ChangeNotifier {
     }
   }
 
+  /// Restarts the scan loop after a brief pause (debounce duplicate triggers).
+  /// Guards against restart loops when _scanning has already been cleared.
+  /// _restarting stays true for the ENTIRE restart (delay + _startScanInternal)
+  /// so that the isScanning→false event fired by stopScan() inside
+  /// _startScanInternal() does not trigger yet another restart.
+  bool _restarting = false;
+  Future<void> _scheduleRestart() async {
+    if (!_scanning || _restarting) return;
+    _restarting = true;
+    try {
+      // Brief pause so the OS fully releases BLE resources before we restart.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!_scanning) return; // user may have called stopScan during the delay
+      _status = 'Перезапуск сканирования BLE...';
+      notifyListeners();
+      await _startScanInternal();
+    } finally {
+      _restarting = false;
+    }
+  }
+
   Future<void> stopScan() async {
+    _scanning = false; // set first so in-flight restart guards bail out
+    _restarting = false;
+    _scanRestartTimer?.cancel();
+    _scanRestartTimer = null;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    _isScanningSubscription?.cancel();
+    _isScanningSubscription = null;
+    _notifyDebounce?.cancel();
     await FlutterBluePlus.stopScan();
     await _scanSubscription?.cancel();
     _scanSubscription = null;
-    _scanning = false;
+    _resolvedT1Cache.clear();
+    _resolvingT1Keys.clear();
+    _rawTimestamps.clear();
     _status = 'Сканирование остановлено';
     notifyListeners();
   }
 
   void clearDevices() {
     _devices.clear();
+    _rawTimestamps.clear();
+    // Clear resolution cache so T1 tags are re-resolved on the next packet.
+    // Without this, slot-changed tags remain invisible after the list is cleared.
+    _resolvedT1Cache.clear();
+    _resolvingT1Keys.clear();
     notifyListeners();
   }
 
@@ -180,6 +377,22 @@ class BleScannerController extends ChangeNotifier {
     return true;
   }
 
+  // Corrects for platform-channel batching: Android sometimes delivers 2–3
+  // packets at once, making the measured gap a 2× or 3× multiple of the real
+  // advertising interval. Divides back to the true interval when a multiple
+  // in the range 2–5× is detected. Larger ratios (>5×) indicate a genuine
+  // interval change (e.g. night-mode switch 2 s → 60 s) and are kept as-is.
+  static Duration _estimateInterval(Duration measured, Duration? previous) {
+    if (previous == null) return measured;
+    final prevMs = previous.inMilliseconds;
+    if (prevMs < 50) return measured;
+    final ratio = measured.inMilliseconds / prevMs;
+    if (ratio >= 1.7 && ratio < 5.5) {
+      return Duration(milliseconds: measured.inMilliseconds ~/ ratio.round());
+    }
+    return measured;
+  }
+
   void _handleScanResult(ScanResult result) {
     final advData = result.advertisementData;
     final mfrMap = advData.manufacturerData;
@@ -192,52 +405,89 @@ class BleScannerController extends ChangeNotifier {
     if (mfrMap.isNotEmpty) {
       companyId = mfrMap.keys.first;
       mfrBytes = mfrMap.values.first;
-      final mfrHex =
-          mfrBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-      debugPrint(
-          '[T1] ${result.device.remoteId} rssi=${result.rssi} '
-          'company=0x${companyId.toRadixString(16).padLeft(4, "0")} '
-          'mfr=${mfrBytes.length}b [$mfrHex]');
-    } else {
-      debugPrint(
-          '[T1] ${result.device.remoteId} rssi=${result.rssi} mfr=0b []');
+      if (kDebugMode) {
+        final mfrHex =
+            mfrBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+        debugPrint('[T1] ${result.device.remoteId} rssi=${result.rssi} '
+            'company=0x${companyId.toRadixString(16).padLeft(4, "0")} '
+            'mfr=${mfrBytes.length}b [$mfrHex]');
+      }
     }
 
-    final iBeacon = _parseIBeacon(companyId, mfrBytes);
-    final deviceId = result.device.remoteId.str;
-    final key = iBeacon != null
-        ? 'ib:${iBeacon.uuid}:${iBeacon.major}:${iBeacon.minor}'
-        : 'dev:$deviceId';
+    // Full manufacturer data hex including 2-byte company ID prefix (NRF Connect style).
+    String? rawMfrHex;
+    if (mfrBytes != null) {
+      final prefix = companyId != null
+          ? [companyId & 0xFF, (companyId >> 8) & 0xFF]
+          : <int>[];
+      rawMfrHex = [...prefix, ...mfrBytes]
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join(' ');
+    }
+    final connectable = advData.connectable;
+    // advData.serviceUuids is List<Guid> in flutter_blue_plus 1.36.x, not List<String>
+    final serviceUuids =
+        List<String>.unmodifiable(advData.serviceUuids.map((g) => g.toString()));
 
-    final operator =
+    final iBeacon = _parseIBeacon(companyId, mfrBytes);
+    final radioMac = result.device.remoteId.str;
+
+    final configOperator =
         iBeacon == null ? null : _config?.operatorsByUuid[iBeacon.uuid];
-    final isT1 = operator?.scope == OperatorScope.local;
+    final isT1 = configOperator?.scope == OperatorScope.local;
+    // For non-T1 iBeacons, look up in the operator registry (which covers
+    // both config-origin and user-added operators, all with chosen colors).
+    final registryOp =
+        (iBeacon != null && !isT1) ? _operatorsRepo?.getByUuid(iBeacon.uuid) : null;
     T1ResolvedData? resolvedData;
     var note = '';
     var resolved = false;
 
     if (isT1 && iBeacon != null) {
-      final lookup = _lookupTable['${iBeacon.major}:${iBeacon.minor}'];
+      final lookupKey = '${iBeacon.major}:${iBeacon.minor}';
+      final lookup = _resolvedT1Cache[lookupKey];
       if (lookup != null) {
         resolved = true;
         resolvedData = T1ResolvedData(
           tagId: lookup.tagId,
           slot: lookup.slot,
           mac: lookup.mac,
-          stopName: _config?.stops[lookup.tagId],
+          stopName: _stopName(lookup.tagId),
         );
         note = resolvedData.stopName == null
             ? 'T1: номер остановки расшифрован, но не найден в справочнике'
             : 'T1: остановка расшифрована локально';
       } else {
-        note = 'T1: пакет распознан по UUID, но не дешифрован текущим ключом/слотом';
+        note = _resolvingT1Keys.contains(lookupKey)
+            ? 'T1: локальная дешифровка выполняется...'
+            : 'T1: пакет распознан по UUID, выполняется локальная дешифровка';
+        _scheduleT1Resolution(
+          lookupKey: lookupKey,
+          frame: iBeacon,
+        );
       }
-    } else if (iBeacon != null && operator != null) {
-      note = 'iBeacon известного внешнего оператора';
+    } else if (iBeacon != null && registryOp != null) {
+      note = 'iBeacon оператора «${registryOp.name}»';
     } else if (iBeacon != null) {
       note = 'Неизвестный iBeacon';
     } else {
       note = 'BLE устройство без iBeacon payload';
+    }
+
+    // ── Key selection and deduplication ────────────────────────────────────
+    // Resolved T1 entries are keyed by tagId so the same physical tag always
+    // occupies the same slot regardless of slot rotation (major/minor change).
+    // When a new resolved entry arrives, all stale unresolved T1 broadcasts
+    // (from previous slots of the same or other dynamic tags) are removed.
+    final String key;
+    if (resolved && resolvedData != null) {
+      key = 't1:${resolvedData.tagId}';
+      // Remove ghost iBeacon entries from previous T1 slot broadcasts.
+      _devices.removeWhere((k, v) => v.isT1 && !v.isResolved);
+    } else if (iBeacon != null) {
+      key = 'ib:${iBeacon.uuid}:${iBeacon.major}:${iBeacon.minor}';
+    } else {
+      key = 'dev:$radioMac';
     }
 
     final name = advData.advName.isNotEmpty
@@ -246,46 +496,147 @@ class BleScannerController extends ChangeNotifier {
             ? result.device.platformName
             : null;
 
+    // result.timeStamp = DateTime.now() set by flutter_blue_plus at the moment
+    // the native Android advertisement callback fires for THIS device.
+    // It advances only when the device sends a new packet — other devices'
+    // packets do NOT update it. Safe to use directly as wall-clock lastSeen.
+    final rawTs = result.timeStamp;
+    final prevRawTs = _rawTimestamps[key];
+    // Any change in rawTs means a genuine new advertisement from this device.
+    // No ms threshold: rawTs is DateTime.now() per-packet, so even 1 µs change
+    // is a real new packet. This correctly handles high-frequency advertisers.
+    final isNewPacket = prevRawTs == null || rawTs != prevRawTs;
+
+    final existing = _devices[key];
+    Duration? interval;
+    if (isNewPacket && existing != null) {
+      final diff = rawTs.difference(existing.lastSeen);
+      // diff < 10 ms is a key-change artefact (T1 ib:... → t1:... transition):
+      // existing.lastSeen was copied from the previous key's rawTs, so diff ≈ 0.
+      if (diff.inMilliseconds >= 10) {
+        interval = _estimateInterval(diff, existing.lastInterval);
+      } else {
+        interval = existing.lastInterval;
+      }
+    } else {
+      interval = existing?.lastInterval;
+    }
+    if (isNewPacket) _rawTimestamps[key] = rawTs;
+
     _devices[key] = BeaconViewModel(
       id: key,
       deviceName: name,
+      radioMac: radioMac,
       rssi: result.rssi,
-      lastSeen: DateTime.now(),
+      lastSeen: isNewPacket ? rawTs : (existing?.lastSeen ?? rawTs),
       iBeacon: iBeacon,
-      operatorName: operator?.name,
-      operatorCode: operator?.code,
+      operatorName: configOperator?.name ?? registryOp?.name,
+      operatorCode: configOperator?.code ?? registryOp?.code,
+      operatorColor: registryOp?.colorValue,
       isT1: isT1,
       isResolved: resolved,
       note: note,
       resolvedData: resolvedData,
+      lastInterval: interval,
+      connectable: connectable,
+      serviceUuids: serviceUuids,
+      companyId: companyId,
+      rawMfrHex: rawMfrHex,
     );
+    // No notifyListeners() here — the stream listener batches all packets and
+    // calls _scheduleNotify() once per scan cycle.
+  }
 
-    notifyListeners();
+  void _scheduleT1Resolution({
+    required String lookupKey,
+    required IBeaconFrame frame,
+  }) {
+    final settings = _activeSettings;
+    if (settings == null || _resolvingT1Keys.contains(lookupKey)) {
+      return;
+    }
+
+    _resolvingT1Keys.add(lookupKey);
+    T1Decoder.resolveMajorMinor(settings, frame.major, frame.minor)
+        .then((entry) {
+      if (entry != null) {
+        _resolvedT1Cache[lookupKey] = entry;
+        final unresolvedKey = 'ib:${frame.uuid}:${frame.major}:${frame.minor}';
+        final existing = _devices.remove(unresolvedKey);
+        // Transfer the stored rawTimestamp to the new key so the first batch
+        // after resolution is not misclassified as a "new packet" (which would
+        // produce interval ≈ 0 ms because rawTs == existing.lastSeen).
+        final prevRawTs = _rawTimestamps.remove(unresolvedKey);
+        if (prevRawTs != null) {
+          _rawTimestamps['t1:${entry.tagId}'] = prevRawTs;
+        }
+        final stopName = _stopName(entry.tagId);
+        final now = DateTime.now();
+        // Preserve the interval already measured in _handleScanResult rather
+        // than computing a new one here (async resolution gap is not a real interval).
+        final interval = existing?.lastInterval;
+
+        _devices['t1:${entry.tagId}'] = BeaconViewModel(
+          id: 't1:${entry.tagId}',
+          deviceName: existing?.deviceName,
+          radioMac: existing?.radioMac,
+          rssi: existing?.rssi ?? -999,
+          lastSeen: existing?.lastSeen ?? now,
+          iBeacon: frame,
+          operatorName: _config?.localOperator.name,
+          operatorCode: _config?.localOperator.code,
+          isT1: true,
+          isResolved: true,
+          note: stopName == null
+              ? 'T1: номер остановки расшифрован, но не найден в справочнике'
+              : 'T1: остановка расшифрована локально',
+          resolvedData: T1ResolvedData(
+            tagId: entry.tagId,
+            slot: entry.slot,
+            mac: entry.mac,
+            stopName: stopName,
+          ),
+          lastInterval: interval,
+          connectable: existing?.connectable ?? true,
+          serviceUuids: existing?.serviceUuids ?? const [],
+          companyId: existing?.companyId,
+          rawMfrHex: existing?.rawMfrHex,
+        );
+      }
+    }).catchError((Object error) {
+      _error = error.toString();
+    }).whenComplete(() {
+      _resolvingT1Keys.remove(lookupKey);
+      notifyListeners();
+    });
   }
 
   /// Парсит iBeacon из данных flutter_blue_plus.
   ///
-  /// flutter_blue_plus возвращает manufacturerData как Map<int, List<int>>:
+  /// flutter_blue_plus возвращает manufacturerData как Map(int, List(int)):
   ///   - companyId: Company ID (напр. 0x004C для Apple)
   ///   - data: байты БЕЗ company ID → [0x02, 0x15, UUID(16), major(2), minor(2), txPower]
   ///
-  /// Также поддерживаем старый формат с company ID включённым в начале.
+  /// Также поддерживаем старый формат с company ID включённым в начале данных.
   IBeaconFrame? _parseIBeacon(int? companyId, List<int>? data) {
     if (data == null || data.isEmpty) return null;
 
     int base; // индекс байта 0x02 (iBeacon subtype) в data
 
-    if (companyId == 0x004C && data.length >= 23 &&
-        data[0] == 0x02 && data[1] == 0x15) {
+    if (companyId == 0x004C &&
+        data.length >= 23 &&
+        data[0] == 0x02 &&
+        data[1] == 0x15) {
       // flutter_blue_plus формат: company ID отдельно, data = [0x02 0x15 ...]
       base = 0;
     } else if (data.length >= 25 &&
-        data[0] == 0x4C && data[1] == 0x00 &&
-        data[2] == 0x02 && data[3] == 0x15) {
+        data[0] == 0x4C &&
+        data[1] == 0x00 &&
+        data[2] == 0x02 &&
+        data[3] == 0x15) {
       // Формат с company ID включённым в data (совместимость)
       base = 2;
-    } else if (data.length >= 23 &&
-        data[0] == 0x02 && data[1] == 0x15) {
+    } else if (data.length >= 23 && data[0] == 0x02 && data[1] == 0x15) {
       // Любой производитель, iBeacon subtype
       base = 0;
     } else {
@@ -294,22 +645,34 @@ class BleScannerController extends ChangeNotifier {
 
     if (data.length < base + 23) return null;
 
-    final uuid = bytesToHex(data.sublist(base + 2, base + 18));
+    // normalizeUuid() в конфиге даёт lowercase — приводим к тому же регистру
+    final uuid = bytesToHex(data.sublist(base + 2, base + 18)).toLowerCase();
     final major = (data[base + 18] << 8) | data[base + 19];
     final minor = (data[base + 20] << 8) | data[base + 21];
     final txPowerRaw = data[base + 22];
     final txPower = txPowerRaw > 127 ? txPowerRaw - 256 : txPowerRaw;
 
-    debugPrint('[T1] iBeacon: uuid=$uuid '
-        'major=0x${major.toRadixString(16)} '
-        'minor=0x${minor.toRadixString(16)} '
-        'tx=$txPower');
+    if (kDebugMode) {
+      debugPrint('[T1] iBeacon: uuid=$uuid '
+          'major=0x${major.toRadixString(16)} '
+          'minor=0x${minor.toRadixString(16)} '
+          'tx=$txPower');
+    }
 
-    return IBeaconFrame(uuid: uuid, major: major, minor: minor, txPower: txPower);
+    return IBeaconFrame(
+        uuid: uuid, major: major, minor: minor, txPower: txPower);
   }
 
   @override
   void dispose() {
+    _scanning = false;
+    _restarting = false;
+    _scanRestartTimer?.cancel();
+    _cleanupTimer?.cancel();
+    _isScanningSubscription?.cancel();
+    _notifyDebounce?.cancel();
+    _stopsRepo?.removeListener(_onStopsChanged);
+    _operatorsRepo?.removeListener(_onOperatorsChanged);
     _adapterSub?.cancel();
     _scanSubscription?.cancel();
     FlutterBluePlus.stopScan();

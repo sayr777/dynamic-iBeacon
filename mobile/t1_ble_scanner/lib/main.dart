@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'src/ui/scanner_page.dart';
+import 'src/ui/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +24,7 @@ class T1BleScannerApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0F172A),
         useMaterial3: true,
       ),
-      home: const ScannerPage(),
+      home: const SplashScreen(),
     );
   }
 }
